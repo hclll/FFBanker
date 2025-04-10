@@ -20,8 +20,16 @@ def perform_mean_shift_clustering(parser_obj: Parser):
         print("No instances found in the parser object.")
         return None, None, 0
 
-    # Extract coordinates (x, y) from instances
-    coordinates = np.array([[inst.x, inst.y] for inst in parser_obj.instances])
+    # Check if instance is a FF, and extract coordinates from FF instances
+    coordinates = np.array([[inst.x, inst.y] for inst in parser_obj.instances if str(inst.cell_type)[0]=="F"])
+            
+    # Calculate number of flip-flops from coordinates collected. This is to see if it correctly finds them.
+    Coordcount = 0;
+    for coords in coordinates:
+        Coordcount = Coordcount + 1;
+
+    # Extract coonates (x, y) from instances
+    #coordinates = np.array([[inst.x, inst.y] for inst in parser_obj.instances])
 
     # Estimate bandwidth
     # quantile: Proportion of samples to use for bandwidth estimation (0.3 means 30%)
@@ -37,7 +45,7 @@ def perform_mean_shift_clustering(parser_obj: Parser):
         labels = np.zeros(len(coordinates), dtype=int)
         cluster_centers = np.mean(coordinates, axis=0, keepdims=True) if len(coordinates) > 0 else np.array([])
         n_clusters = 1 if len(coordinates) > 0 else 0
-        return labels, cluster_centers, n_clusters
+        return labels, cluster_centers, n_clusters, Coordcount
 
 
     print(f"Estimated bandwidth: {bandwidth}")
@@ -53,25 +61,36 @@ def perform_mean_shift_clustering(parser_obj: Parser):
 
     print(f"Estimated number of clusters: {n_clusters}")
 
-    return labels, cluster_centers, n_clusters
+    return labels, cluster_centers, n_clusters, Coordcount
 
 if __name__ == "__main__":
     # Example usage:
-    file_path = "bm/testcase2_0812.txt"  # Make sure this path is correct
+    file_path = "bm/testcase1_0812.txt"  # Make sure this path is correct
     parser = Parser(file_path)
+
+    FFcount = 0;
+
     try:
         parsed_data = parser.parse()
         print(f"Successfully parsed data from {file_path}")
-        print(f"Number of instances to cluster: {len(parsed_data.instances)}")
+        #print(f"Number of instances to cluster: {len(parsed_data.instances)}")
 
-        labels, centers, num_clusters = perform_mean_shift_clustering(parsed_data)
+        FFcount = 0;
+        for inst in parsed_data.instances:
+            if str(inst.cell_type)[0]=="F":
+                FFcount = FFcount + 1;
+        print("Number of FFs from parser:", FFcount)
+
+        labels, centers, num_clusters, coordcount = perform_mean_shift_clustering(parsed_data)
 
         if labels is not None:
             print(f"\nClustering complete.")
             print(f"Number of clusters found: {num_clusters}")
+            
             # You can add more detailed output here, e.g., print labels or centers
             print("Cluster labels for each instance:", labels)
             print("Cluster centers:", centers)
+            print("Number of coords:",coordcount)
 
             # Example: Assign cluster labels back to instances if needed
             # for i, inst in enumerate(parsed_data.instances):

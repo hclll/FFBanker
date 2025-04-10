@@ -6,6 +6,7 @@ class Die:
         self.upper_right_y = upper_right_y
         self.inputs = {}
         self.outputs = {}
+        self.instances = {}
 
     def add_input(self, name, x, y):
         self.inputs[name] = (x, y)
@@ -58,6 +59,12 @@ class Instance:
         self.x = x
         self.y = y
 
+    def __str__(self):
+        return str([self.name, self.cell_type, self.x, self.y])
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class Net:
     def __init__(self, name):
@@ -90,6 +97,12 @@ class PlacementRow:
         self.site_width = site_width
         self.site_height = site_height
         self.total_sites = total_sites
+
+    def __str__(self):
+        return str([self.start_x, self.start_y, self.site_width, self.site_height, self.total_sites])
+
+    def __repr__(self):
+        return str(self)
 
 
 class TimingInfo:

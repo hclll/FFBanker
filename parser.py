@@ -12,6 +12,10 @@ class Parser:
         self.placement_rows = []
         self.timing_info = None
         self.power_info = PowerInfo()
+        self.alpha = None
+        self.beta = None
+        self.gamma = None
+        self.lambda_ = None
 
     def parse(self):
         with open(self.file_path, "r") as file:
@@ -27,13 +31,13 @@ class Parser:
             keyword = tokens[0]
 
             if keyword == "Alpha":
-                alpha = float(tokens[1])
+                self.alpha = float(tokens[1])
             elif keyword == "Beta":
-                beta = float(tokens[1])
+                self.beta = float(tokens[1])
             elif keyword == "Gamma":
-                gamma = float(tokens[1])
+                self.gamma = float(tokens[1])
             elif keyword == "Lambda":
-                lambda_ = float(tokens[1])
+                self.lambda_ = float(tokens[1])
             elif keyword == "DieSize":
                 self.die = Die(*map(int, tokens[1:]))
             elif keyword == "NumInput":
@@ -96,6 +100,8 @@ class Parser:
                 self.timing_info.add_timing_slack(tokens[1], tokens[2], float(tokens[3]))
             elif keyword == "GatePower":
                 self.power_info.add_power(tokens[1], float(tokens[2]))
+            else:
+                assert False, "Unknown item found"
 
             i += 1
 
@@ -114,3 +120,10 @@ if __name__ == "__main__":
     print("Placement Rows:", len(parsed_data.placement_rows))
     print("Timing Info:", vars(parsed_data.timing_info) if parsed_data.timing_info else "None")
     print("Power Info:", vars(parsed_data.power_info))
+    print("Alpha:", parsed_data.alpha)
+    print("Beta:", parsed_data.beta)
+    print("Gamma:", parsed_data.gamma)
+    print("Lambda:", parsed_data.lambda_)
+
+    print(parsed_data.instances)
+    print(parser.placement_rows)

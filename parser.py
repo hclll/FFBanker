@@ -105,6 +105,8 @@ class Parser:
 
             i += 1
 
+        self.die.instances = {inst.name: inst for inst in self.instances}
+
         return self
 
 
@@ -127,3 +129,4 @@ if __name__ == "__main__":
 
     print(parsed_data.instances)
     print(parser.placement_rows)
+    print(parser.die.instances)

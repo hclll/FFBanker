@@ -7,6 +7,7 @@ class Die:
         self.inputs = {}
         self.outputs = {}
         self.instances = {}
+        self.placed_sites = set()
 
     def add_input(self, name, x, y):
         self.inputs[name] = (x, y)
@@ -23,6 +24,7 @@ class FlipFlop:
         self.height = height
         self.pin_count = pin_count
         self.pins = {}
+        self.features = {}
 
     def add_pin(self, pin_name, x, y):
         self.pins[pin_name] = (x, y)

@@ -65,31 +65,34 @@ def debanking_all(die, cell_lib, netlist):
                 for bit in range(ff.bits):
                     new_name = f"{inst.name}_bit{bit}"
                     new_inst = Instance(new_name, single_bit_ff_type, inst.x, inst.y + bit * 5)
+                    new_inst.original_x = inst.x  
+                    new_inst.original_y = inst.y
+                    new_inst.original_cell_type = inst.cell_type
+                    new_inst.original_name = inst.name
                     bit_instances[bit] = new_inst
                     new_instances[new_name] = new_inst
                 del die.instances[inst_name]
 
                 # update netlist
-                pattern = re.compile(rf"{re.escape(inst.name)}/([A-Z]+)(\d+)?")  # e.g., U1/D0
+                pattern = re.compile(r"([A-Z]+)(\d+)?")  # e.g., D0, Q1
                 for net in netlist.nets.values():
                     new_pins = []
-                    for pin in net.pins:
-                        match = pattern.match(pin)
-                        if match:
-                            base, bit_str = match.groups()
-                            if bit_str is not None:
-                                bit = int(bit_str)
-                                if bit in bit_instances:
-                                    new_pin = f"{bit_instances[bit].name}/{base}"
-                                    new_pins.append(new_pin)
-                            else:
-                                # duplicate non-bit pins for all bits
-                                for new_inst in bit_instances.values():
-                                    new_pin = f"{new_inst.name}/{base}"
-                                    new_pins.append(new_pin)
-                    # update net pins
-                    net.pins = [p for p in net.pins if not p.startswith(inst.name + "/")]
-                    net.pins.extend(new_pins)
+                    for instance_name, pin_name in net.pins:
+                        if instance_name == inst.name:
+                            match = pattern.fullmatch(pin_name)
+                            if match:
+                                base, bit_str = match.groups()
+                                if bit_str is not None:
+                                    bit = int(bit_str)
+                                    if bit in bit_instances:
+                                        new_pins.append((bit_instances[bit].name, base))
+                                else:
+                                    # duplicate non-bit pins for all bits
+                                    for new_inst in bit_instances.values():
+                                        new_pins.append((new_inst.name, base))
+                        else:
+                            new_pins.append((instance_name, pin_name))
+                    net.pins = new_pins
             else:
                 new_instances[inst_name] = inst
         else:
@@ -108,7 +111,7 @@ if __name__ == "__main__":
     for ff in cell_lib.flip_flops.values():
         print(f"FF: {ff.name}, Area: {ff.width * ff.height}, Pins: {ff.pins}, Features: {ff.features}")
     print("///////////////////////////")
-    
+
     print("instances:", parsed_data.die.instances)
     netlist = parsed_data.netlist
     for net in netlist.nets.values():

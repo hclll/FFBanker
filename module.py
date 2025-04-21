@@ -95,7 +95,7 @@ class Net:
         if '/' in full_pin:
             instance_name, pin_name = full_pin.split('/')
         else:
-            instance_name, pin_name = "TOP", full_pin  # "TOP" 表示 top-level pin
+            instance_name, pin_name = "TOP", full_pin  # top-level pin
         self.pins.append((instance_name, pin_name))
 
 

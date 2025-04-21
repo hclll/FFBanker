@@ -68,17 +68,17 @@ if __name__ == "__main__":
     file_path = "bm/testcase1_0812.txt"  # Make sure this path is correct
     parser = Parser(file_path)
 
-    FFcount = 0;
+    FFcount = 0
 
     try:
         parsed_data = parser.parse()
         print(f"Successfully parsed data from {file_path}")
         #print(f"Number of instances to cluster: {len(parsed_data.instances)}")
 
-        FFcount = 0;
+        FFcount = 0
         for inst in parsed_data.instances:
             if str(inst.cell_type)[0]=="F":
-                FFcount = FFcount + 1;
+                FFcount = FFcount + 1
         print("Number of FFs from parser:", FFcount)
 
         labels, centers, num_clusters, coordcount = perform_mean_shift_clustering(parsed_data)

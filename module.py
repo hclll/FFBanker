@@ -53,6 +53,19 @@ class CellLibrary:
     def add_gate(self, gate):
         self.gates[gate.name] = gate
 
+    def get_pin_offset(self, cell_type, pin_name):
+        if cell_type in self.flip_flops:
+            cell = self.flip_flops[cell_type]
+        elif cell_type in self.gates:
+            cell = self.gates[cell_type]
+        else:
+            raise ValueError(f"Cell type {cell_type} not found in library.")
+
+        if pin_name in cell.pins:
+            return cell.pins[pin_name]
+        else:
+            raise ValueError(f"Pin {pin_name} not found for cell type {cell_type}.")
+
 
 class Instance:
     def __init__(self, name, cell_type, x, y):
@@ -60,6 +73,11 @@ class Instance:
         self.cell_type = cell_type
         self.x = x
         self.y = y
+        self.original_x = x  
+        self.original_y = y  
+        self.original_cell_type = cell_type
+        self.original_name = name
+        self.slack = 0  
 
     def __str__(self):
         return str([self.name, self.cell_type, self.x, self.y])
@@ -73,8 +91,12 @@ class Net:
         self.name = name
         self.pins = []
 
-    def add_pin(self, pin):
-        self.pins.append(pin)
+    def add_pin(self, full_pin):
+        if '/' in full_pin:
+            instance_name, pin_name = full_pin.split('/')
+        else:
+            instance_name, pin_name = "TOP", full_pin  # "TOP" 表示 top-level pin
+        self.pins.append((instance_name, pin_name))
 
 
 class Netlist:

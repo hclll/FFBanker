@@ -1,4 +1,5 @@
 import numpy as np
+import pickle
 from parser import Parser
 from module import Instance, PlacementRow, FlipFlop, Gate, CellLibrary # Added Gate and CellLibrary
 from cluster import perform_mean_shift_clustering
@@ -106,47 +107,121 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
         print(f"Processing cluster {cluster_label} with {k} instances.")
 
-        # Check if a k-bit FF exists
-        target_ff_type: FlipFlop | None = None
-        target_ff_name: str | None = None
+        # Check if a k-bit FF exists or find the largest smaller one
+        exact_ff_type: FlipFlop | None = None
+        exact_ff_name: str | None = None
+        best_smaller_ff_type: FlipFlop | None = None
+        best_smaller_ff_name: str | None = None
+        max_smaller_bits = -1 # Initialize to track the largest bits < k
+
         for name, ff in parser_obj.cell_library.flip_flops.items():
             if ff.bits == k:
-                target_ff_type = ff
-                target_ff_name = name
-                break
-        
+                exact_ff_type = ff
+                exact_ff_name = name
+                break # Found exact match, no need to look further
+            elif ff.bits < k:
+                if ff.bits > max_smaller_bits:
+                    max_smaller_bits = ff.bits
+                    best_smaller_ff_type = ff
+                    best_smaller_ff_name = name
+
+        target_ff_type: FlipFlop | None = None
+        target_ff_name: str | None = None
+        original_k = k # Store original k for potential adjustment message
+        popped_instance_names = set() # Initialize empty set for popped instances
+        # Create a copy of the cluster's instances to potentially modify
+        current_cluster_instances = list(cluster_instances)
+
+        if exact_ff_type and exact_ff_name:
+            target_ff_type = exact_ff_type
+            target_ff_name = exact_ff_name
+            #print(f"  Found exact matching {k}-bit FF type: {target_ff_name}")
+        elif best_smaller_ff_type and best_smaller_ff_name:
+            target_ff_type = best_smaller_ff_type
+            target_ff_name = best_smaller_ff_name
+            target_bits = target_ff_type.bits
+            print(f"  No exact {original_k}-bit FF found. Using largest smaller FF: {target_ff_name} ({target_bits} bits).")
+
+            # Adjust cluster: Remove furthest instances until len(current_cluster_instances) == target_bits
+            if len(current_cluster_instances) > target_bits:
+                num_to_remove = len(current_cluster_instances) - target_bits
+                print(f"  Adjusting cluster size from {original_k} to {target_bits}. Removing {num_to_remove} furthest instances.")
+
+                cluster_center_x = cluster_centers[cluster_label][0]
+                cluster_center_y = cluster_centers[cluster_label][1]
+
+                # Calculate distances from cluster center
+                distances = []
+                for inst in current_cluster_instances:
+                    dist = math.hypot(inst.x - cluster_center_x, inst.y - cluster_center_y)
+                    distances.append((dist, inst))
+
+                # Sort by distance descending (furthest first)
+                distances.sort(key=lambda item: item[0], reverse=True)
+
+                # Identify instances to pop (furthest) and keep (closest)
+                popped_instances = distances[:num_to_remove]
+                kept_instances_with_dist = distances[num_to_remove:]
+
+                popped_instance_names = {inst.name for _, inst in popped_instances}
+                # Update the list of instances for this cluster to only the kept ones
+                current_cluster_instances = [inst for _, inst in kept_instances_with_dist]
+
+                # Update k to reflect the new cluster size for placement logic
+                k = len(current_cluster_instances)
+                assert k == target_bits # Sanity check: k should now match the target FF bits
+
+            else:
+                 # This case might occur if k was already <= target_bits (e.g., if target_bits was the only smaller one)
+                 print(f"  Cluster size {original_k} is already <= target bits {target_bits}. No instances removed.")
+                 k = len(current_cluster_instances) # Ensure k reflects the actual count
+
+        # --- Placement Logic (using target_ff_type and potentially modified current_cluster_instances/k) ---
         if target_ff_type and target_ff_name:
-            print(f"  Found matching {k}-bit FF type: {target_ff_name}")
-            
-            # Calculate placement
+            #print(f"  Attempting placement for {target_ff_type.bits}-bit FF {target_ff_name}")
             cluster_center_x = cluster_centers[cluster_label][0]
             cluster_center_y = cluster_centers[cluster_label][1]
-            
+
             closest_row = find_closest_row(cluster_center_y, parser_obj.placement_rows)
-            
+
             if closest_row:
                 new_x = calculate_placement(cluster_center_x, target_ff_type.width, closest_row)
-                
+
                 if new_x is not None:
+                    # Placement successful
                     new_y = closest_row.start_y
-                    # Create new merged instance name (e.g., merged_cluster_0_ffk)
-                    new_instance_name = f"merged_cluster_{cluster_label}_ff{k}" 
-                    
+                    # Create new merged instance name using the target FF's bits, not the potentially reduced k
+                    new_instance_name = f"merged_cluster_{cluster_label}_ff{target_ff_type.bits}"
+
                     new_merged_instance = Instance(new_instance_name, target_ff_name, new_x, new_y)
                     new_instances.append(new_merged_instance)
                     #print(f"  Created merged instance {new_instance_name} at ({new_x}, {new_y}) in row starting at y={closest_row.start_y}")
 
-                    # Mark original instances for removal
-                    for inst in cluster_instances:
-                        merged_instance_names.add(inst.name)
+                    # Mark original instances that were *successfully merged* for removal.
+                    # Use the potentially reduced current_cluster_instances list.
+                    for inst in current_cluster_instances:
+                        merged_instance_names.add(inst.name) # Keep track of names that formed the merge
                         if inst.name in original_indices:
                              instances_to_remove_indices.add(original_indices[inst.name])
+
+                    # Also mark instances that were *popped* due to size mismatch for removal,
+                    # but only if the placement was successful.
+                    for name in popped_instance_names:
+                         if name in original_indices:
+                              instances_to_remove_indices.add(original_indices[name])
+
                 else:
-                     print(f"  Placement failed for cluster {cluster_label}. Keeping original FFs.")
+                     # Placement failed
+                     print(f"  Placement failed for cluster {cluster_label} (target FF: {target_ff_name}). Keeping original FFs from this cluster.")
+                     # Do not mark any instances (merged or popped) from this cluster for removal if placement fails.
             else:
+                # No suitable row found
                 print(f"  Could not find suitable placement row for cluster {cluster_label}. Keeping original FFs.")
+                # Do not mark any instances (merged or popped) from this cluster for removal if no row found.
         else:
-            print(f"  No {k}-bit FF type found in library for cluster {cluster_label}. Keeping original FFs.")
+            # No suitable FF found (neither exact nor smaller)
+            print(f"  No suitable FF type found in library for cluster {cluster_label} (original size {original_k}). Keeping original FFs.")
+            # Do not mark any instances from this cluster for removal if no suitable FF was found.
 
     # Create the final list of instances
     final_instances = []
@@ -281,7 +356,7 @@ def print_overlaps(site_to_instances: dict[tuple[int, int], list[str]], verbose=
     return overlap_found
 
 
-def find_adjacent_empty_site(instance_name: str, instance_width: int, current_site: tuple[int, int], row: PlacementRow, site_to_instances: dict[tuple[int, int], list[str]], max_search_dist: int = 10) -> tuple[int, int] | None:
+def find_adjacent_empty_site(instance_name: str, instance_width: int, current_site: tuple[int, int], row: PlacementRow, site_to_instances: dict[tuple[int, int], list[str]], max_search_dist: int = 100) -> tuple[int, int] | None:
     """
     Searches for the nearest sequence of empty sites adjacent (left or right)
     to the current_site that can accommodate the instance width.
@@ -365,11 +440,11 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
         site_to_instances, instance_to_sites = create_site_instance_mappings(parser_obj)
 
         overlaps_found_this_iter = False
-        sites_with_overlaps = []
+        sites_with_overlaps = set()
         for site, instances in site_to_instances.items():
             if len(instances) > 1:
                 overlaps_found_this_iter = True
-                sites_with_overlaps.append(site)
+                sites_with_overlaps.add(site)
                 #print(f"    Overlap detected at site {site}: Instances {instances}")
 
         if not overlaps_found_this_iter:
@@ -386,75 +461,76 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
             overlapping_instances = site_to_instances[site]
             #print(f"    Attempting to resolve overlap at {site} for {overlapping_instances}")
 
+            for instance_to_move_name in overlapping_instances:
             # Try moving the second instance in the list (simple strategy)
-            instance_to_move_name = overlapping_instances[1]
-            instance_to_move = instances_dict.get(instance_to_move_name)
+            #instance_to_move_name = overlapping_instances[1]
+                instance_to_move = instances_dict.get(instance_to_move_name)
 
-            if not instance_to_move:
-                print(f"    Error: Instance '{instance_to_move_name}' not found in instances_dict. Skipping.")
-                continue
+                if not instance_to_move:
+                    print(f"    Error: Instance '{instance_to_move_name}' not found in instances_dict. Skipping.")
+                    continue
 
-            # Get instance width
-            instance_width = 0
-            if instance_to_move.cell_type in cell_library.flip_flops:
-                instance_width = cell_library.flip_flops[instance_to_move.cell_type].width
-            elif instance_to_move.cell_type in cell_library.gates:
-                instance_width = cell_library.gates[instance_to_move.cell_type].width
-            else:
-                print(f"    Warning: Cell type '{instance_to_move.cell_type}' for instance '{instance_to_move_name}' not found. Cannot determine width. Skipping move.")
-                continue
+                # Get instance width
+                instance_width = 0
+                if instance_to_move.cell_type in cell_library.flip_flops:
+                    instance_width = cell_library.flip_flops[instance_to_move.cell_type].width
+                elif instance_to_move.cell_type in cell_library.gates:
+                    instance_width = cell_library.gates[instance_to_move.cell_type].width
+                else:
+                    print(f"    Warning: Cell type '{instance_to_move.cell_type}' for instance '{instance_to_move_name}' not found. Cannot determine width. Skipping move.")
+                    continue
 
-            # Find the row
-            row = placement_rows_map.get(site[1]) # site[1] is the y-coordinate
-            if not row:
-                 # This shouldn't happen if create_site_instance_mappings worked, but check anyway
-                 print(f"    Warning: Could not find placement row for site {site}. Skipping move for {instance_to_move_name}.")
-                 continue
+                # Find the row
+                row = placement_rows_map.get(site[1]) # site[1] is the y-coordinate
+                if not row:
+                    # This shouldn't happen if create_site_instance_mappings worked, but check anyway
+                    print(f"    Warning: Could not find placement row for site {site}. Skipping move for {instance_to_move_name}.")
+                    continue
 
-            # Find an adjacent empty site
-            new_site_coords = find_adjacent_empty_site(instance_to_move_name, instance_width, site, row, site_to_instances)
+                # Find an adjacent empty site
+                new_site_coords = find_adjacent_empty_site(instance_to_move_name, instance_width, site, row, site_to_instances, max_search_dist=10**iteration+1)
 
-            if new_site_coords:
-                new_x, new_y = new_site_coords
-                #print(f"    Moving instance '{instance_to_move_name}' from ({instance_to_move.x}, {instance_to_move.y}) to ({new_x}, {new_y})")
+                if new_site_coords:
+                    new_x, new_y = new_site_coords
+                    #print(f"    Moving instance '{instance_to_move_name}' from ({instance_to_move.x}, {instance_to_move.y}) to ({new_x}, {new_y})")
 
-                # Update the instance object's coordinates directly
-                instance_to_move.x = new_x
-                instance_to_move.y = new_y # Y should remain the same (same row)
+                    # Update the instance object's coordinates directly
+                    instance_to_move.x = new_x
+                    instance_to_move.y = new_y # Y should remain the same (same row)
 
-                # Update site_to_instances incrementally for the next checks in *this* iteration
-                # 1. Remove instance from all its old sites
-                old_sites = instance_to_sites.get(instance_to_move_name, [])
-                for old_site in old_sites:
-                    if old_site in site_to_instances and instance_to_move_name in site_to_instances[old_site]:
-                        site_to_instances[old_site].remove(instance_to_move_name)
-                        # If list becomes empty, optionally remove the key: del site_to_instances[old_site]
+                    # Update site_to_instances incrementally for the next checks in *this* iteration
+                    # 1. Remove instance from all its old sites
+                    old_sites = instance_to_sites.get(instance_to_move_name, [])
+                    for old_site in old_sites:
+                        if old_site in site_to_instances and instance_to_move_name in site_to_instances[old_site]:
+                            site_to_instances[old_site].remove(instance_to_move_name)
+                            # If list becomes empty, optionally remove the key: del site_to_instances[old_site]
 
-                # 2. Add instance to its new sites
-                num_sites_needed = math.ceil(instance_width / row.site_width)
-                for i in range(num_sites_needed):
-                     current_site_x = new_x + i * row.site_width
-                     current_site_coords = (current_site_x, new_y)
-                     if current_site_coords not in site_to_instances:
-                         site_to_instances[current_site_coords] = []
-                     # Avoid adding duplicates if somehow already there
-                     if instance_to_move_name not in site_to_instances[current_site_coords]:
-                          site_to_instances[current_site_coords].append(instance_to_move_name)
+                    # 2. Add instance to its new sites
+                    num_sites_needed = math.ceil(instance_width / row.site_width)
+                    for i in range(num_sites_needed):
+                        current_site_x = new_x + i * row.site_width
+                        current_site_coords = (current_site_x, new_y)
+                        if current_site_coords not in site_to_instances:
+                            site_to_instances[current_site_coords] = []
+                        # Avoid adding duplicates if somehow already there
+                        if instance_to_move_name not in site_to_instances[current_site_coords]:
+                            site_to_instances[current_site_coords].append(instance_to_move_name)
 
-                # Update instance_to_sites for the moved instance (will be fully rebuilt next iteration)
-                instance_to_sites[instance_to_move_name] = [ (new_x + i * row.site_width, new_y) for i in range(num_sites_needed)]
+                    # Update instance_to_sites for the moved instance (will be fully rebuilt next iteration)
+                    instance_to_sites[instance_to_move_name] = [ (new_x + i * row.site_width, new_y) for i in range(num_sites_needed)]
 
 
-                moved_count += 1
-            else:
-                #print(f"    Failed to find a new location for '{instance_to_move_name}' near site {site}.")
-                failed_moves += 1
-                # If we fail to move, the overlap persists for the next iteration (or final failure)
+                    moved_count += 1
+                else:
+                    #print(f"    Failed to find a new location for '{instance_to_move_name}' near site {site}.")
+                    failed_moves += 1
+                    # If we fail to move, the overlap persists for the next iteration (or final failure)
 
         print(f"  Iteration {iteration + 1} summary: Moved {moved_count} instances, failed to move {failed_moves} instances involved in overlaps.")
         if moved_count == 0 and overlaps_found_this_iter:
-             print(f"  Could not resolve remaining overlaps after iteration {iteration + 1}.")
-             break # No progress made, exit loop
+            print(f"  Could not resolve remaining overlaps after iteration {iteration + 1}.")
+            break # No progress made, exit loop
 
 
     # Final check after loop
@@ -471,7 +547,7 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
 
 if __name__ == "__main__":
     # Example Usage:
-    file_path = "bm/testcase1_0812.txt" # Or bm/sampleCase
+    file_path = "bm/testcase2_0812.txt" # Or bm/sampleCase
     #file_path = "bm/sampleCase" # Or bm/sampleCase
     print(f"Parsing file: {file_path}")
     parser = Parser(file_path)
@@ -482,11 +558,21 @@ if __name__ == "__main__":
         if not parsed_data.placement_rows:
              print("Warning: No placement rows found in the input file.")
              
-        print(f"Initial number of instances: {len(parsed_data.instances)}")
+        print("\n--- Initial State Summary ---")
+        # Re-create mappings to reflect final state after potential resolution
+        initial_site_map, initial_instance_map = create_site_instance_mappings(parsed_data)
+        print(f"Initial instance count: {len(parsed_data.instances)}")
+        print(f"Initial occupied sites: {len(initial_site_map)}")
 
         # Pass the original parsed data, not potentially modified instances yet
         updated_instances = cluster_and_merge_flip_flops(parsed_data)
         parsed_data.instances = updated_instances
+    #try:
+        
+        with open("temp2.pkl", 'wb') as f:
+            pickle.dump(parsed_data, f)
+        #with open("temp.pkl", 'rb') as f:
+        #    parsed_data =  pickle.load(f)
         # --- Create Site/Instance Mappings ---
         print("\nCreating site-instance mappings...")
         site_map, instance_map = create_site_instance_mappings(parsed_data)

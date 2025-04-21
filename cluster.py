@@ -21,7 +21,7 @@ def perform_mean_shift_clustering(parser_obj: Parser):
         return None, None, 0
 
     # Check if instance is a FF, and extract coordinates from FF instances
-    coordinates = np.array([[inst.x, inst.y] for inst in parser_obj.instances if str(inst.cell_type)[0]=="F"])
+    coordinates = np.array([[inst.x, inst.y] for inst in parser_obj.instances if "FF" in  str(inst.cell_type)])
             
     # Calculate number of flip-flops from coordinates collected. This is to see if it correctly finds them.
     Coordcount = 0;
@@ -36,7 +36,7 @@ def perform_mean_shift_clustering(parser_obj: Parser):
     # n_samples: Number of samples to use. If specified, quantile is ignored.
     # Adjust quantile or n_samples based on dataset size and characteristics if needed.
     #bandwidth = estimate_bandwidth(coordinates, quantile=0.002, n_samples=1000, random_state=42, n_jobs=-1)
-    bandwidth = 5000
+    bandwidth = 6000
 
     if bandwidth <= 0:
         print(f"Estimated bandwidth is {bandwidth}. Clustering cannot proceed.")

@@ -75,7 +75,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
             self.instances = instances
             
     temp_parser = TempParser(one_bit_ff_instances)
-    labels, cluster_centers, n_clusters = perform_mean_shift_clustering(temp_parser)
+    labels, cluster_centers, n_clusters, _ = perform_mean_shift_clustering(temp_parser)
 
     if labels is None or n_clusters <= 0:
         print("Clustering failed or found no clusters.")
@@ -130,7 +130,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
                     
                     new_merged_instance = Instance(new_instance_name, target_ff_name, new_x, new_y)
                     new_instances.append(new_merged_instance)
-                    print(f"  Created merged instance {new_instance_name} at ({new_x}, {new_y}) in row starting at y={closest_row.start_y}")
+                    #print(f"  Created merged instance {new_instance_name} at ({new_x}, {new_y}) in row starting at y={closest_row.start_y}")
 
                     # Mark original instances for removal
                     for inst in cluster_instances:
@@ -155,13 +155,18 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
     print(f"Removed {len(instances_to_remove_indices)} original 1-bit FFs.")
     print(f"Added {len(new_instances)} merged FFs.")
     print(f"Final instance count: {len(final_instances)}")
+    print(f"Found a total of {len(temp_parser.instances)} 1-bit ffs")
+    print(f"Grouped them into {n_clusters} clusters.")
 
     return final_instances
 
 
+
+
 if __name__ == "__main__":
     # Example Usage:
-    file_path = "bm/testcase2_0812.txt" # Or bm/sampleCase
+    file_path = "bm/testcase1_0812.txt" # Or bm/sampleCase
+    #file_path = "bm/sampleCase" # Or bm/sampleCase
     print(f"Parsing file: {file_path}")
     parser = Parser(file_path)
     try:

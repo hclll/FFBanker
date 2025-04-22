@@ -77,6 +77,7 @@ class Instance:
         self.original_y = y  
         self.original_cell_type = cell_type
         self.original_name = name
+        self.pin_mapping = {} # new : ori
         self.slack = 0  
 
     def __str__(self):

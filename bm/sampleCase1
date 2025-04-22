@@ -44,8 +44,9 @@ Pin out
 Net in 2
 Pin in
 Pin reg1/D
-Net clk 5
+Net clk 6
 Pin CLK
+Pin reg5/CLK
 Pin reg4/CLK
 Pin reg3/CLK
 Pin reg2/CLK

@@ -86,10 +86,12 @@ def debanking_all(die, cell_lib, netlist):
                                     bit = int(bit_str)
                                     if bit in bit_instances:
                                         new_pins.append((bit_instances[bit].name, base))
+                                        bit_instances[bit].pin_mapping[base] = pin_name
                                 else:
                                     # duplicate non-bit pins for all bits
                                     for new_inst in bit_instances.values():
                                         new_pins.append((new_inst.name, base))
+                                    
                         else:
                             new_pins.append((instance_name, pin_name))
                     net.pins = new_pins
@@ -122,3 +124,9 @@ if __name__ == "__main__":
     print("instances:", parsed_data.die.instances)
     for net in netlist.nets.values():
         print(f"Net: {net.name}, Pins: {net.pins}")
+    
+    for inst_name, inst in parsed_data.die.instances.items():
+        print(f"Inst: {inst_name}, Type: {inst.cell_type}, Original Type: {inst.original_cell_type}, Original Name: {inst.original_name}")
+        print(inst.pin_mapping)
+        # for new_pin, old_pin in inst.pin_mapping.items():
+        #     print(f"  Pin mapping: {new_pin} -> {old_pin}")

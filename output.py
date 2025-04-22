@@ -32,28 +32,40 @@ if __name__ == "__main__":
             file.write("Inst " + str(instances[key].name) + " " + str(instances[key].cell_type) + " " 
                                + str(instances[key].x)+ " " + str(instances[key].y) + "\n");
         
-        # WORK IN PROGRESS: 2 debanked FFs can have the same original cell type, so if I try using a dict to map the old and new pins, 
-        #                   both will end up just getting the zero pins as D and Q. I can do a check: if same old cell type, map every 3
-        #                   old pins of that old cell type to each debanked FF.   
         
         # Map old register pins to new register pins
         for key in instances:
             
-            old_pins = []; 
-            new_old_pins_dict = {}; # key = new pin, value = old_pin_key name
+            # Notes:
+            # Check if the .pin_mapping dict is empty. If empty, it's a single-bit but NOT debanked register, so same pin names are used.
+            # Check if the pin mappings have to go in the order of D, Q, CLK. If so, I have to fix the empty dict case.
+            # Add case that checks for banked FFs and maps those. Differentiate multi-bit FF already present in input case vs after banking phase.
+
+            # Check if instance has not had its pins changed (currently, it only changes if it gets debanked in preprocessing)
+            if (not instances[key].pin_mapping):
+                for pin in cell_lib.flip_flops[instances[key].cell_type].pins:
+                    file.write(str(instances[key].original_name) + "/" + str(pin) + " "
+                          + "map" + " " + str(instances[key].name) + "/" + str(pin) + "\n");
             
-            # Record the names of the old instance pins
-            for old_pin in cell_lib.flip_flops[instances[key].original_cell_type].pins:
-                old_pins.append(str(old_pin));  
-            print("old_pins: ",old_pins);
-            
-            # Make a dictionary where new instance pins are keys with corresponding old-pin name values
-            for index,new_pin in enumerate(cell_lib.flip_flops[instances[key].cell_type].pins):
-                new_old_pins_dict[new_pin] = old_pins[index];
-            #print(new_old_pins_dict);
-            
-            # Map the pins
-            for pin in cell_lib.flip_flops[instances[key].cell_type].pins:        
-                file.write(str(instances[key].original_name) + "/" + new_old_pins_dict[pin] + " " 
-                          + "map" + " " + str(instances[key].name) + "/" + str(pin) + "\n"); 
+            # If pin_mapping dict is not empty, this is a single-bit, debanked register. Debanked after preprocessing.
+            # New CLK currently is the same as the old CLK, as its pin should not change.
+            else:
+                for pin in cell_lib.flip_flops[instances[key].cell_type].pins:
+                    if (pin == 'D'):
+                        for old_pin in instances[key].pin_mapping:
+                            if ("D" in str(old_pin)): # check that old_pin is a D-pin
+                                file.write(str(instances[key].original_name) + "/" + str(instances[key].pin_mapping[old_pin]) + " "
+                                + "map" + " " + str(instances[key].name) + "/" + str(pin) + "\n");
+                    elif (pin != 'D' and pin!= "Q"): # should be CLK
+                        file.write(str(instances[key].original_name) + "/" + str(pin) + " "
+                                + "map" + " " + str(instances[key].name) + "/" + str(pin) + "\n");
+                    elif (pin == 'Q'):
+                        for old_pin in instances[key].pin_mapping:
+                            if ("Q" in str(old_pin)): # check that old_pin is a Q-pin
+                                file.write(str(instances[key].original_name) + "/" + str(instances[key].pin_mapping[old_pin]) + " "
+                                + "map" + " " + str(instances[key].name) + "/" + str(pin) + "\n");
+
+
+
+                 
 

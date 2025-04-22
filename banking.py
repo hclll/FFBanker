@@ -49,11 +49,16 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
         parser_obj: A Parser object containing parsed design data.
 
     Returns:
-        A new list of instances with merged flip-flops, or the original list if no merging occurs.
+        A tuple containing:
+            - A new list of instances with merged flip-flops.
+            - A dictionary mapping original 1-bit FF instance names to the 
+              name of the merged FF instance they became part of.
     """
-    
+    old_ff_to_new_ff_map: dict[str, str] = {} # Initialize the mapping
+
     # 1. Filter 1-bit Flip-Flop Instances
     one_bit_ff_instances = []
+    other_instances = []
     one_bit_ff_cell_types = {
         name: ff for name, ff in parser_obj.cell_library.flip_flops.items() if ff.bits == 1
     }
@@ -67,6 +72,8 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
         if inst.cell_type in one_bit_ff_cell_types:
             one_bit_ff_instances.append(inst)
             original_indices[inst.name] = i
+        else:
+            other_instances.append(inst)
 
     if not one_bit_ff_instances:
         print("No 1-bit flip-flop instances found in the design.")
@@ -197,18 +204,21 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
                     new_instances.append(new_merged_instance)
                     #print(f"  Created merged instance {new_instance_name} at ({new_x}, {new_y}) in row starting at y={closest_row.start_y}")
 
-                    # Mark original instances that were *successfully merged* for removal.
+                    # Mark original instances that were *successfully merged* for removal
+                    # and add them to the mapping.
                     # Use the potentially reduced current_cluster_instances list.
                     for inst in current_cluster_instances:
                         merged_instance_names.add(inst.name) # Keep track of names that formed the merge
                         if inst.name in original_indices:
                              instances_to_remove_indices.add(original_indices[inst.name])
+                        # Add to the mapping
+                        old_ff_to_new_ff_map[inst.name] = new_merged_instance.name
 
                     # Also mark instances that were *popped* due to size mismatch for removal,
                     # but only if the placement was successful.
                     for name in popped_instance_names:
-                         if name in original_indices:
-                              instances_to_remove_indices.add(original_indices[name])
+                        if name in original_indices:
+                             instances_to_remove_indices.add(original_indices[name])
 
                 else:
                      # Placement failed
@@ -236,8 +246,9 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
     print(f"Final instance count: {len(final_instances)}")
     print(f"Found a total of {len(temp_parser.instances)} 1-bit ffs")
     print(f"Grouped them into {n_clusters} clusters.")
+    print(f"Created mapping for {len(old_ff_to_new_ff_map)} original FFs to new merged FFs.")
 
-    return final_instances
+    return final_instances, old_ff_to_new_ff_map
 
 def create_site_instance_mappings(parser_obj: Parser) -> tuple[dict[tuple[int, int], list[str]], dict[str, list[tuple[int, int]]]]:
     """
@@ -379,14 +390,15 @@ def find_adjacent_empty_site(instance_name: str, instance_width: int, current_si
     start_x, start_y = current_site
 
     # Search Right then Left
-    for direction in [1, -1]: # 1 for right, -1 for left
-        for i in range(1, max_search_dist + 1):
+    for direction in [1, -1]: # 1 for right, -1 for left 
+        for i in range(1, max_search_dist + 1): # TODO probably should switch to distance then direction
             potential_start_site_x = start_x + direction * i * row.site_width
             potential_site_coords = (potential_start_site_x, start_y)
 
             # Check if potential start site is within row bounds
             if not (row.start_x <= potential_start_site_x < row.start_x + row.total_sites * row.site_width):
-                continue # Went off the end of the row in this direction
+                is_clear = False
+                break # Went off the end of the row in this direction
 
             # Check if the required number of sites starting from here are empty and within bounds
             is_clear = True
@@ -403,15 +415,17 @@ def find_adjacent_empty_site(instance_name: str, instance_width: int, current_si
                 # Check occupancy
                 if check_site_coords in site_to_instances and site_to_instances[check_site_coords]:
                     # Allow overlap only if it's the instance we are trying to move (relevant if moving left)
+                    assert len(site_to_instances[check_site_coords]) != 0
                     if not (len(site_to_instances[check_site_coords]) == 1 and site_to_instances[check_site_coords][0] == instance_name):
-                         is_clear = False
-                         break # Site is occupied by another instance
+                        is_clear = False
+                        break # Site is occupied by another instance
 
                 sites_to_occupy.append(check_site_coords) # Keep track for potential update
 
             if is_clear:
                 #print(f"    Found empty spot for {instance_name} at {potential_site_coords}")
                 return potential_site_coords # Found a suitable empty spot
+            
 
         # If searching right failed, the loop continues to search left (direction = -1)
 
@@ -488,10 +502,11 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
                     continue
 
                 # Find an adjacent empty site
-                new_site_coords = find_adjacent_empty_site(instance_to_move_name, instance_width, site, row, site_to_instances, max_search_dist=10**iteration+1)
+                new_site_coords = find_adjacent_empty_site(instance_to_move_name, instance_width, site, row, site_to_instances, max_search_dist=10**(iteration+1))
 
                 if new_site_coords:
                     new_x, new_y = new_site_coords
+                    assert new_x != instance_to_move.x
                     #print(f"    Moving instance '{instance_to_move_name}' from ({instance_to_move.x}, {instance_to_move.y}) to ({new_x}, {new_y})")
 
                     # Update the instance object's coordinates directly
@@ -501,7 +516,9 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
                     # Update site_to_instances incrementally for the next checks in *this* iteration
                     # 1. Remove instance from all its old sites
                     old_sites = instance_to_sites.get(instance_to_move_name, [])
+                    print("old_sites", old_sites)
                     for old_site in old_sites:
+                        print(site_to_instances[old_site])
                         if old_site in site_to_instances and instance_to_move_name in site_to_instances[old_site]:
                             site_to_instances[old_site].remove(instance_to_move_name)
                             # If list becomes empty, optionally remove the key: del site_to_instances[old_site]
@@ -519,7 +536,6 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
 
                     # Update instance_to_sites for the moved instance (will be fully rebuilt next iteration)
                     instance_to_sites[instance_to_move_name] = [ (new_x + i * row.site_width, new_y) for i in range(num_sites_needed)]
-
 
                     moved_count += 1
                 else:
@@ -545,9 +561,136 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
         return True
 
 
+def create_pin_mapping(original_instances: list[Instance], final_instances: list[Instance], old_ff_to_new_ff_map: dict[str, str], cell_library: CellLibrary) -> dict[str, str]:
+    """
+    Creates a mapping from old instance pin names to new instance pin names
+    after flip-flop merging.
+
+    Args:
+        original_instances: The list of instances before merging.
+        final_instances: The list of instances after merging.
+        old_ff_to_new_ff_map: Dictionary mapping old 1-bit FF names to new merged FF names.
+        cell_library: The CellLibrary object containing cell definitions.
+
+    Returns:
+        A dictionary mapping old full pin names (e.g., "old_ff/D") to
+        new full pin names (e.g., "merged_ff/D0").
+    """
+    pin_mapping: dict[str, str] = {}
+    final_instances_map = {inst.name: inst for inst in final_instances}
+    original_instances_map = {inst.name: inst for inst in original_instances}
+
+    # 1. Create reverse map: new_ff_name -> [old_ff_name1, old_ff_name2, ...]
+    new_ff_to_old_ffs_map = defaultdict(list)
+    for old_name, new_name in old_ff_to_new_ff_map.items():
+        if old_name in original_instances_map: # Ensure the old FF actually exists
+             new_ff_to_old_ffs_map[new_name].append(old_name)
+        else:
+             print(f"Warning: Old FF '{old_name}' from mapping not found in original instances. Skipping.")
+
+
+    # 2. Process merged flip-flops
+    merged_old_instance_names = set(old_ff_to_new_ff_map.keys())
+
+    for new_ff_name, old_ff_names in new_ff_to_old_ffs_map.items():
+        if not old_ff_names: continue # Skip if list is empty
+
+        if new_ff_name not in final_instances_map:
+            print(f"Warning: New FF '{new_ff_name}' from mapping not found in final instances. Skipping mapping for its constituents.")
+            continue
+
+        new_instance = final_instances_map[new_ff_name]
+        try:
+            new_ff_library_cell = cell_library.flip_flops[new_instance.cell_type]
+        except KeyError:
+            print(f"Warning: Cell type '{new_instance.cell_type}' for merged FF '{new_ff_name}' not found in library. Skipping mapping.")
+            continue
+
+        # Get original instance objects and sort them by coordinate (Y then X)
+        old_ff_instances = []
+        for name in old_ff_names:
+             if name in original_instances_map:
+                 old_ff_instances.append(original_instances_map[name])
+             # else: already warned above
+
+        if not old_ff_instances: continue # Skip if no valid old instances found
+
+        # Sort primarily by Y, secondarily by X to assign bit index consistently
+        old_ff_instances.sort(key=lambda inst: (inst.original_y, inst.original_x))
+
+        # Map pins for each original FF based on its sorted position (bit_index)
+        for bit_index, old_instance in enumerate(old_ff_instances):
+            try:
+                old_ff_library_cell = cell_library.flip_flops[old_instance.cell_type]
+            except KeyError:
+                print(f"Warning: Cell type '{old_instance.cell_type}' for original FF '{old_instance.name}' not found in library. Skipping its pin mapping.")
+                continue
+
+            for old_pin_name in old_ff_library_cell.pins.keys():
+                # Determine the corresponding new pin name convention
+                # Common conventions: D->D0, Q->Q0, CLK->CLK, RST->RST etc.
+                # This might need adjustment based on actual library conventions
+                new_pin_name = ""
+                is_shared_pin = old_pin_name.upper() in ["CLK", "CLOCK", "CK", "RESET", "RST", "SET", "PRESET", "PRE", "CLEAR", "CLR"] # Common shared pins
+
+                if is_shared_pin:
+                    new_pin_name = old_pin_name # Assume shared pins keep their name
+                elif old_pin_name.upper() == 'D':
+                    new_pin_name = f"D{bit_index}"
+                elif old_pin_name.upper() == 'Q':
+                     new_pin_name = f"Q{bit_index}"
+                # Add more rules here if other pin naming conventions exist (e.g., TI, SI, SO for scan chains)
+                else:
+                    # Fallback for potentially indexed pins we don't explicitly handle
+                    # Check if the old pin name itself suggests an index (less common for 1-bit)
+                    # Or assume it might be indexed in the new FF
+                    new_pin_name = f"{old_pin_name}{bit_index}" # Guessing convention
+                    #print(f"Debug: Assuming indexed pin mapping for '{old_pin_name}' -> '{new_pin_name}'")
+
+
+                # Check if the determined new pin name actually exists in the new FF type
+                if new_pin_name in new_ff_library_cell.pins:
+                    old_full_pin = f"{old_instance.name}/{old_pin_name}"
+                    new_full_pin = f"{new_instance.name}/{new_pin_name}"
+                    pin_mapping[old_full_pin] = new_full_pin
+                    #print(f"  Mapped: {old_full_pin} -> {new_full_pin}")
+                else:
+                    # If the indexed version didn't exist, maybe it's a shared pin we missed?
+                    # Try mapping to the original name if that exists in the new FF.
+                    if old_pin_name in new_ff_library_cell.pins:
+                         old_full_pin = f"{old_instance.name}/{old_pin_name}"
+                         new_full_pin = f"{new_instance.name}/{old_pin_name}" # Map to non-indexed version
+                         pin_mapping[old_full_pin] = new_full_pin
+                         #print(f"  Mapped (as shared): {old_full_pin} -> {new_full_pin}")
+                    else:
+                         print(f"Warning: Could not map pin '{old_pin_name}' of old FF '{old_instance.name}'. "
+                               f"Neither '{new_pin_name}' nor '{old_pin_name}' found in new FF '{new_instance.name}' ({new_instance.cell_type}).")
+
+
+    # 3. Add identity mappings for pins of unmerged instances
+    for instance in original_instances:
+        if instance.name not in merged_old_instance_names:
+            cell = None
+            if instance.cell_type in cell_library.gates:
+                cell = cell_library.gates[instance.cell_type]
+            elif instance.cell_type in cell_library.flip_flops:
+                 # This could be multi-bit FFs present in the original design
+                 cell = cell_library.flip_flops[instance.cell_type]
+            # else: Cell type not found (should have been warned earlier if critical)
+
+            if cell:
+                for pin_name in cell.pins.keys():
+                    full_pin = f"{instance.name}/{pin_name}"
+                    if full_pin not in pin_mapping: # Avoid overwriting if somehow already mapped
+                         pin_mapping[full_pin] = full_pin # Identity mapping
+
+    print(f"Created pin mapping for {len(pin_mapping)} pins.")
+    return pin_mapping
+
+
 if __name__ == "__main__":
     # Example Usage:
-    file_path = "bm/testcase2_0812.txt" # Or bm/sampleCase
+    file_path = "bm/testcase1_0812.txt" # Or bm/sampleCase
     #file_path = "bm/sampleCase" # Or bm/sampleCase
     print(f"Parsing file: {file_path}")
     parser = Parser(file_path)
@@ -557,41 +700,52 @@ if __name__ == "__main__":
         
         if not parsed_data.placement_rows:
              print("Warning: No placement rows found in the input file.")
-             
+
         print("\n--- Initial State Summary ---")
-        # Re-create mappings to reflect final state after potential resolution
+        # Create initial mappings before merging/resolving
         initial_site_map, initial_instance_map = create_site_instance_mappings(parsed_data)
         print(f"Initial instance count: {len(parsed_data.instances)}")
         print(f"Initial occupied sites: {len(initial_site_map)}")
 
-        # Pass the original parsed data, not potentially modified instances yet
-        updated_instances = cluster_and_merge_flip_flops(parsed_data)
-        parsed_data.instances = updated_instances
-    #try:
-        
+        # --- Cluster and Merge Flip-Flops ---
+        print("\n--- Clustering and Merging Flip-Flops ---")
+        updated_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data)
+        parsed_data.instances = updated_instances # Update instances in the parsed_data object
+
+        print("\n--- Old FF to New FF Mapping (Sample) ---")
+        map_sample_count = 0
+        for old_ff, new_ff in old_to_new_map.items():
+            if map_sample_count >= 5: break
+            print(f"  Original: {old_ff} -> Merged: {new_ff}")
+            map_sample_count += 1
+        if not old_to_new_map:
+            print("  No FFs were merged, mapping is empty.")
+        # -----------------------------------------
+
+        # --- Save intermediate state (optional) ---
         with open("temp2.pkl", 'wb') as f:
             pickle.dump(parsed_data, f)
-        #with open("temp.pkl", 'rb') as f:
+        #with open("temp2.pkl", 'rb') as f:
         #    parsed_data =  pickle.load(f)
-        # --- Create Site/Instance Mappings ---
-        print("\nCreating site-instance mappings...")
+
+        # --- Create Site/Instance Mappings AFTER merging ---
+        print("\nCreating site-instance mappings post-merge...")
         site_map, instance_map = create_site_instance_mappings(parsed_data)
         print(f"Generated mapping for {len(instance_map)} instances across {len(site_map)} occupied sites.")
 
         # Optional: Print some mapping details for verification
-        print("\n--- Example Mappings ---")
-        print("Site to Instances (first 5 occupied sites):")
-        for i, (site, inst_list) in enumerate(site_map.items()):
-            if i >= 5: break
-            print(f"  Site {site}: {inst_list}")
+        # print("\n--- Example Mappings Post-Merge ---")
+        # print("Site to Instances (first 5 occupied sites):")
+        # for i, (site, inst_list) in enumerate(site_map.items()):
+        #     if i >= 5: break
+        #     print(f"  Site {site}: {inst_list}")
+        # print("\nInstance to Sites (first 5 mapped instances):")
+        # for i, (inst, site_list) in enumerate(instance_map.items()):
+        #      if i >= 5: break
+        #      print(f"  Instance {inst}: {site_list}")
 
-        print("\nInstance to Sites (first 5 mapped instances):")
-        for i, (inst, site_list) in enumerate(instance_map.items()):
-             if i >= 5: break
-             print(f"  Instance {inst}: {site_list}")
-
-        # --- Check for Overlaps BEFORE resolution ---
-        print("\n--- Initial Overlap Check ---")
+        # --- Check for Overlaps AFTER merging ---
+        print("\n--- Overlap Check Post-Merge ---")
         initial_overlap_found = print_overlaps(site_map)
         # -----------------------------------------
 
@@ -599,10 +753,8 @@ if __name__ == "__main__":
         if initial_overlap_found:
              resolve_overlaps(parsed_data) # Modify parsed_data.instances in-place
         else:
-             print("\nNo initial overlaps to resolve.")
+             print("\nNo overlaps to resolve post-merge.")
         # ------------------------
-
-
 
         # --- Final Check and Summary ---
         print("\n--- Final State Summary ---")
@@ -613,7 +765,7 @@ if __name__ == "__main__":
         print("\n--- Final Overlap Check ---")
         print_overlaps(final_site_map)
         # -----------------------------
-        
+
         # Further analysis or output generation could go here
         # E.g., write the updated instance list to a file
 

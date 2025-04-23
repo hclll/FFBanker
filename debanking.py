@@ -1,7 +1,7 @@
 # Import modules / functions here
 from module import Die, CellLibrary, Instance, Netlist, Net, FlipFlop
 from parser import Parser
-from preprocessing import find_single_bit_ff
+from preprocessing import find_single_bit_ff, debanking_all
 import statistics
 import re
 import subprocess
@@ -99,8 +99,15 @@ def generate_output_file(parsed_data):
     cell_lib = parsed_data.cell_library;
 
     # Access instances dictionary
-    instances = parsed_data.die.instances;
+    all_instances = parsed_data.die.instances;
+    instances = {};
 
+    # Check that instances are FFs.
+    for instance in all_instances:
+        if all_instances[instance].cell_type in cell_lib.flip_flops:
+            instances[instance] = all_instances[instance];
+
+    
     # Write instance names and mappings to output.txt file
     with open("output.txt","w") as file:
 
@@ -146,31 +153,35 @@ def generate_output_file(parsed_data):
 
 
 if __name__ == "__main__":
-    parser = Parser("bm/sampleCase")
-    parsed_data = parser.parse()
-
-    # Run pre-processing here
     
-    # Run banking here
-
-    # Run generate_output_file here 
-    generate_output_file(parsed_data);
-    input_file = str("sampleCase");
-    output_file = str("sampleOutput"); # replace this with output.txt 
-
-    # Run checker using test input and generated output file
-    decreased_slack = run_checker(input_file,output_file);
-    print("Decreased slack entry found:",decreased_slack);
-
-    # Run debanking_some here using checker results.
+    # Preprocessing
+    parser = Parser("bm/testcase2_0812.txt")
+    parsed_data = parser.parse()
     die = parsed_data.die;
     cell_lib = parsed_data.cell_library;
     netlist = parsed_data.netlist;
+    debanking_all(die,cell_lib,netlist);
+    
+    # Banking
 
+    # Generate output file of current design 
+    generate_output_file(parsed_data);
+
+    # Run checker using test input and generated output file.
+    input_file = str("testcase2_0812.txt");
+    output_file = str("output.txt"); # replace this with output.txt 
+    decreased_slack = run_checker(input_file,output_file);
+    print("Decreased slack entry found:",decreased_slack);
+
+    # Debank more using checker slack results.
+    die = parsed_data.die;
+    cell_lib = parsed_data.cell_library;
+    netlist = parsed_data.netlist;
     debanking_some(die,cell_lib,netlist,decreased_slack); 
 
-    # Placement fixing has to be done before generating final output.txt
-    # Run generate_output_file here for final design. Should replace previous version in same directory.
+    # FINAL Placement fixing HERE
+    # Run generate_output_file here for final design. 
+    # Make sure names of new instances do not match any of the old names.
 
 
     

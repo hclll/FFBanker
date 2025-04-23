@@ -131,5 +131,6 @@ if __name__ == "__main__":
     print(parser.placement_rows)
     print(parser.die.instances)
 
+    print("------------------------------------------------------------------\nNetlist:\n")
     for net in parsed_data.netlist.nets.values():
         print(net.name, net.pins)

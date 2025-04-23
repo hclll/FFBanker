@@ -19,7 +19,13 @@ if __name__ == "__main__":
     debanking_all(parsed_data.die, cell_lib, netlist)
     
     # Access instances dictionary
-    instances = parsed_data.die.instances; 
+    all_instances = parsed_data.die.instances;
+    instances = {};
+
+    # Check that instances are FFs.
+    for instance in all_instances:
+        if all_instances[instance].cell_type in cell_lib.flip_flops:
+            instances[instance] = all_instances[instance]; 
 
     # Write instance names and mappings to output.txt file
     with open("output.txt","w") as file:

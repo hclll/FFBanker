@@ -7,7 +7,7 @@ import math
 from collections import defaultdict # Added defaultdict
 from preprocessing import debanking_all
 
-def find_closest_row(y_coord: float, placement_rows: list[PlacementRow]) -> PlacementRow | None:
+def find_closest_row(y_coord, placement_rows):
     """Finds the placement row closest to the given y-coordinate."""
     if not placement_rows:
         return None
@@ -15,7 +15,7 @@ def find_closest_row(y_coord: float, placement_rows: list[PlacementRow]) -> Plac
     closest_row = min(placement_rows, key=lambda row: abs(row.start_y - y_coord))
     return closest_row
 
-def calculate_placement(cluster_center_x: float, new_ff_width: int, row: PlacementRow) -> int | None:
+def calculate_placement(cluster_center_x, new_ff_width, row):
     """Calculates a valid x-coordinate for the new flip-flop within the row."""
     
     # Snap the cluster center x to the nearest site start
@@ -41,7 +41,7 @@ def calculate_placement(cluster_center_x: float, new_ff_width: int, row: Placeme
             return None # Indicate placement failure
 
 
-def cluster_and_merge_flip_flops(parser_obj: Parser):
+def cluster_and_merge_flip_flops(parser_obj):
     """
     Clusters 1-bit flip-flop instances and merges them into higher-bit flip-flops 
     aligned with placement rows.
@@ -55,7 +55,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
             - A dictionary mapping original 1-bit FF instance names to the 
               name of the merged FF instance they became part of.
     """
-    old_ff_to_new_ff_map: dict[str, str] = {} # Initialize the mapping
+    old_ff_to_new_ff_map = {} # Initialize the mapping
 
     # 1. Filter 1-bit Flip-Flop Instances
     one_bit_ff_instances = []
@@ -127,7 +127,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
                 exact_ff_type = ff
                 exact_ff_name = name
                 break # Found exact match, no need to look further
-            elif ff.bits < k:
+            elif ff.bits < k: #TODO should cluster all into two flip flops if k is twice max ff.bits
                 if ff.bits > max_smaller_bits:
                     max_smaller_bits = ff.bits
                     best_smaller_ff_type = ff
@@ -136,19 +136,18 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
         target_ff_type: FlipFlop | None = None
         target_ff_name: str | None = None
         original_k = k # Store original k for potential adjustment message
-        popped_instance_names = set() # Initialize empty set for popped instances
         # Create a copy of the cluster's instances to potentially modify
         current_cluster_instances = list(cluster_instances)
 
         if exact_ff_type and exact_ff_name:
             target_ff_type = exact_ff_type
             target_ff_name = exact_ff_name
-            #print(f"  Found exact matching {k}-bit FF type: {target_ff_name}")
+            print(f"  Found exact matching {k}-bit FF type: {target_ff_name}")
         elif best_smaller_ff_type and best_smaller_ff_name:
             target_ff_type = best_smaller_ff_type
             target_ff_name = best_smaller_ff_name
             target_bits = target_ff_type.bits
-            #print(f"  No exact {original_k}-bit FF found. Using largest smaller FF: {target_ff_name} ({target_bits} bits).")
+            print(f"  No exact {original_k}-bit FF found. Using largest smaller FF: {target_ff_name} ({target_bits} bits).")
 
             # Adjust cluster: Remove furthest instances until len(current_cluster_instances) == target_bits
             if len(current_cluster_instances) > target_bits:
@@ -168,10 +167,8 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
                 distances.sort(key=lambda item: item[0], reverse=True)
 
                 # Identify instances to pop (furthest) and keep (closest)
-                popped_instances = distances[:num_to_remove]
                 kept_instances_with_dist = distances[num_to_remove:]
 
-                popped_instance_names = {inst.name for _, inst in popped_instances}
                 # Update the list of instances for this cluster to only the kept ones
                 current_cluster_instances = [inst for _, inst in kept_instances_with_dist]
 
@@ -182,7 +179,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
             else:
                  # This case might occur if k was already <= target_bits (e.g., if target_bits was the only smaller one)
                  #print(f"  Cluster size {original_k} is already <= target bits {target_bits}. No instances removed.")
-                 k = len(current_cluster_instances) # Ensure k reflects the actual count
+                 assert False, "should not happen"
 
         # --- Placement Logic (using target_ff_type and potentially modified current_cluster_instances/k) ---
         if target_ff_type and target_ff_name:
@@ -215,12 +212,6 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
                         # Add to the mapping
                         old_ff_to_new_ff_map[inst.name] = new_merged_instance.name
 
-                    # Also mark instances that were *popped* due to size mismatch for removal,
-                    # but only if the placement was successful.
-                    for name in popped_instance_names:
-                        if name in original_indices:
-                             instances_to_remove_indices.add(original_indices[name])
-
                 else:
                      # Placement failed
                      print(f"  Placement failed for cluster {cluster_label} (target FF: {target_ff_name}). Keeping original FFs from this cluster.")
@@ -251,7 +242,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
     return {i.name:i for i in final_instances}, old_ff_to_new_ff_map
 
-def create_site_instance_mappings(parser_obj: Parser) -> tuple[dict[tuple[int, int], list[str]], dict[str, list[tuple[int, int]]]]:
+def create_site_instance_mappings(parser_obj):
     """
     Creates mappings between placement sites and the instances occupying them.
 
@@ -344,7 +335,7 @@ def create_site_instance_mappings(parser_obj: Parser) -> tuple[dict[tuple[int, i
     return dict(site_to_instances), dict(instance_to_sites) # Convert back to regular dicts
 
 
-def print_overlaps(site_to_instances: dict[tuple[int, int], list[str]], verbose=False):
+def print_overlaps(site_to_instances, verbose=False):
     """
     Prints details of any placement sites occupied by more than one instance.
 
@@ -368,7 +359,7 @@ def print_overlaps(site_to_instances: dict[tuple[int, int], list[str]], verbose=
     return overlap_found
 
 
-def find_adjacent_empty_site(instance_name: str, instance_width: int, current_site: tuple[int, int], row: PlacementRow, site_to_instances: dict[tuple[int, int], list[str]], max_search_dist: int = 100) -> tuple[int, int] | None:
+def find_adjacent_empty_site(instance_name, instance_width, current_site, row, site_to_instances, max_search_dist = 100):
     """
     Searches for the nearest sequence of empty sites adjacent (left or right)
     to the current_site that can accommodate the instance width.
@@ -434,7 +425,7 @@ def find_adjacent_empty_site(instance_name: str, instance_width: int, current_si
     return None
 
 
-def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
+def resolve_overlaps(parser_obj, max_iterations= 10):
     """
     Attempts to resolve instance overlaps by nudging instances to adjacent empty sites.
 
@@ -562,7 +553,7 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
         return True
 
 
-def create_pin_mapping(original_instances: list[Instance], final_instances: list[Instance], old_ff_to_new_ff_map: dict[str, str], cell_library: CellLibrary) -> dict[str, str]:
+def create_pin_mapping(original_instances, final_instances, old_ff_to_new_ff_map, cell_library):
     """
     Creates a mapping from old instance pin names to new instance pin names
     after flip-flop merging.
@@ -654,8 +645,8 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
 
 if __name__ == "__main__":
     # Example Usage:
-    #file_path = "bm/testcase1_0812.txt" # Or bm/sampleCase
-    file_path = "bm/sampleCase" # Or bm/sampleCase
+    file_path = "bm/testcase1_0812.txt" # Or bm/sampleCase
+    #file_path = "bm/sampleCase" # Or bm/sampleCase
     print(f"Parsing file: {file_path}")
     parser = Parser(file_path)
     try:

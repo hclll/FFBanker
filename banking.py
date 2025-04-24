@@ -653,10 +653,6 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
                         assert old_instance.name == old_instance.original_name
                         new_instance.pin_mapping[new_pin_name] = (old_instance.original_name, old_pin_name)
 
-        print(new_instance.original_name)
-        print(new_instance.pin_mapping)
-        assert False
-
 
 
 if __name__ == "__main__":

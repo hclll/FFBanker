@@ -48,9 +48,16 @@ def generate_output_file(parsed_data):
                     for pin in cell_lib.flip_flops[instances[key].cell_type].pins:
                         for new_pin_key in instances[key].pin_mapping:
                             if pin == new_pin_key:
-                                file.write(str(instances[key].pin_mapping[new_pin_key][0]) + "/" + str(instances[key].pin_mapping[new_pin_key][1]) + " " + "map" + " " 
-                                           + str("new_" + instances[key].name) + "/" + str(pin) + "\n");
-                    file.write(str(instances[key].pin_mapping[new_pin_key][0]) + "/" + str("CLK") + " " + "map" + " " + str(instances[key].name) + "/" + str("CLK") + "\n");
+                                file.write(str(instances[key].pin_mapping[new_pin_key][0]) + "/" + str(instances[key].pin_mapping[new_pin_key][1]) + " " + 
+                                "map" + " " + str("new_" + instances[key].name) + "/" + str(pin) + "\n");
+
+                    if cell_lib.flip_flops[instances[key].cell_type].bits == 1:
+                        file.write(str(instances[key].pin_mapping[new_pin_key][0]) + "/" + str("CLK") + " " + "map" + " " + str("new_" + instances[key].name) +                     "/" + str("CLK") + "\n");
+                    else:
+                        #print("original_name: ", instances[key].original_name);
+                        for original_name in instances[key].original_name:
+                            file.write(str(original_name) + "/" + str("CLK") + " " + "map" + " " + str("new_" + instances[key].name) +                     "/" + str("CLK") + "\n");
+
                 
 
 if __name__ == "__main__":

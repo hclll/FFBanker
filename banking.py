@@ -69,7 +69,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
         return parser_obj.die.instances # Return original instances
 
     original_indices = {} # Keep track of original index for later removal
-    for i, inst in enumerate(parser_obj.die.instances):
+    for i, inst in enumerate(parser_obj.die.instances.values()):
         if inst.cell_type in one_bit_ff_cell_types:
             one_bit_ff_instances.append(inst)
             original_indices[inst.name] = i
@@ -78,7 +78,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
     if not one_bit_ff_instances:
         print("No 1-bit flip-flop instances found in the design.")
-        return parser_obj.die.instances # Return original instances
+        return parser_obj.die.instances.values() # Return original instances
 
     print(f"Found {len(one_bit_ff_instances)} 1-bit flip-flop instances to cluster.")
 
@@ -92,7 +92,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
     if labels is None or n_clusters <= 0:
         print("Clustering failed or found no clusters.")
-        return parser_obj.die.instances
+        return parser_obj.die.instances.values()
 
     # 3. Group Instances by Cluster
     clusters: dict[int, list[Instance]] = {}
@@ -236,7 +236,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
     # Create the final list of instances
     final_instances = []
-    for i, inst in enumerate(parser_obj.die.instances):
+    for i, inst in enumerate(parser_obj.die.instances.values()):
         if i not in instances_to_remove_indices:
             final_instances.append(inst)
             
@@ -269,7 +269,7 @@ def create_site_instance_mappings(parser_obj: Parser) -> tuple[dict[tuple[int, i
     cell_library = parser_obj.cell_library
     placement_rows_map = {row.start_y: row for row in parser_obj.placement_rows} # For quick row lookup by y
 
-    for instance in parser_obj.die.instances:
+    for instance in parser_obj.die.instances.values():
         # Get instance width from cell library
         instance_width = 0
         if instance.cell_type in cell_library.flip_flops:
@@ -448,7 +448,6 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
     print("\n--- Resolving Overlapping Instances ---")
     cell_library = parser_obj.cell_library
     placement_rows_map = {row.start_y: row for row in parser_obj.placement_rows}
-    instances_dict = {inst.name: inst for inst in parser_obj.die.instances} # For quick lookup
 
     for iteration in range(max_iterations):
         print(f"  Overlap Resolution Iteration {iteration + 1}/{max_iterations}")
@@ -479,7 +478,7 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
             for instance_to_move_name in overlapping_instances:
             # Try moving the second instance in the list (simple strategy)
             #instance_to_move_name = overlapping_instances[1]
-                instance_to_move = instances_dict.get(instance_to_move_name)
+                instance_to_move = parser_obj.die.instances.get(instance_to_move_name)
                 if instance_to_move.cell_type in cell_library.flip_flops:
                     if not instance_to_move:
                         print(f"    Error: Instance '{instance_to_move_name}' not found in instances_dict. Skipping.")
@@ -677,13 +676,13 @@ if __name__ == "__main__":
 
         # --- Cluster and Merge Flip-Flops ---
         print("\n--- Clustering and Merging Flip-Flops ---")
-        #updated_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data)
+        updated_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data)
         #with open("temp1.pkl", 'wb') as f:
         #    pickle.dump([updated_instances, old_to_new_map], f)
-        with open("temp1.pkl", 'rb') as f:
-            updated_instances, old_to_new_map = pickle.load(f)
-        create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
-        parsed_data.die.instances = updated_instances # Update instances in the parsed_data object
+        #with open("temp1.pkl", 'rb') as f:
+        #    updated_instances, old_to_new_map = pickle.load(f)
+        create_pin_mapping(parsed_data.die.instances.values(), updated_instances, old_to_new_map, parsed_data.cell_library)
+        parsed_data.die.instances = {k:v for k, v in zip([i.name for i in updated_instances], updated_instances)} # Update instances in the parsed_data object
 
         print("\n--- Old FF to New FF Mapping (Sample) ---")
         map_sample_count = 0

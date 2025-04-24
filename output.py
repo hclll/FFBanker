@@ -4,20 +4,11 @@ from preprocessing import annotate_ff_features, find_single_bit_ff, debanking_al
 import statistics
 import re
 
-if __name__ == "__main__":
+def generate_output_file(parsed_data):
 
-    # Parse input file and retrieve data
-    parser = Parser("bm/sampleCase1")
-    parsed_data = parser.parse()
-    
-    # Calculate median FF power, area, timing and label FFs based on medians
-    cell_lib = parsed_data.cell_library
-    annotate_ff_features(cell_lib, parsed_data.timing_info, parsed_data.power_info)
+    # Access cell library
+    cell_lib = parsed_data.cell_library;
 
-    # Debank all multi-bit registers in the input file
-    netlist = parsed_data.netlist
-    debanking_all(parsed_data.die, cell_lib, netlist)
-    
     # Access instances dictionary
     all_instances = parsed_data.die.instances;
     instances = {};
@@ -25,23 +16,22 @@ if __name__ == "__main__":
     # Check that instances are FFs.
     for instance in all_instances:
         if all_instances[instance].cell_type in cell_lib.flip_flops:
-            instances[instance] = all_instances[instance]; 
+            instances[instance] = all_instances[instance];
 
     # Write instance names and mappings to output.txt file
     with open("output.txt","w") as file:
 
         # Write number of instances in new design
-        file.write("CellInst " + str(len(parsed_data.die.instances))+"\n");
+        file.write("CellInst " + str(len(instances))+"\n");
 
         # Write instance name, cell name, and coordinates
         for key in instances:
-            file.write("Inst " + str(instances[key].name) + " " + str(instances[key].cell_type) + " " 
+            file.write("Inst " + str(instances[key].name) + " " + str(instances[key].cell_type) + " "
                                + str(instances[key].x)+ " " + str(instances[key].y) + "\n");
-        
-        
+
         # Map old register pins to new register pins
         for key in instances:
-            
+
             # Notes:
             # Check if the .pin_mapping dict is empty. If empty, it's a single-bit but NOT debanked register, so same pin names are used.
             # Check if the pin mappings have to go in the order of D, Q, CLK. If so, I have to fix the empty dict case.
@@ -52,7 +42,7 @@ if __name__ == "__main__":
                 for pin in cell_lib.flip_flops[instances[key].cell_type].pins:
                     file.write(str(instances[key].original_name) + "/" + str(pin) + " "
                           + "map" + " " + str(instances[key].name) + "/" + str(pin) + "\n");
-            
+
             # If pin_mapping dict is not empty, this is a single-bit, debanked register. Debanked after preprocessing.
             # New CLK currently is the same as the old CLK, as its pin should not change.
             else:
@@ -71,6 +61,24 @@ if __name__ == "__main__":
                                 file.write(str(instances[key].original_name) + "/" + str(instances[key].pin_mapping[old_pin]) + " "
                                 + "map" + " " + str(instances[key].name) + "/" + str(pin) + "\n");
 
+if __name__ == "__main__":
+
+    # Parse input file and retrieve data
+    parser = Parser("bm/sampleCase1")
+    parsed_data = parser.parse()
+    
+    # Calculate median FF power, area, timing and label FFs based on medians
+    cell_lib = parsed_data.cell_library
+    annotate_ff_features(cell_lib, parsed_data.timing_info, parsed_data.power_info)
+
+    # Debank all multi-bit registers in the input file
+    netlist = parsed_data.netlist
+    debanking_all(parsed_data.die, cell_lib, netlist)
+    
+    # Generate output file mapping current design to the old design
+    generate_output_file(parsed_data);
+        
+    
 
 
                  

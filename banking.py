@@ -147,12 +147,12 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
             target_ff_type = best_smaller_ff_type
             target_ff_name = best_smaller_ff_name
             target_bits = target_ff_type.bits
-            print(f"  No exact {original_k}-bit FF found. Using largest smaller FF: {target_ff_name} ({target_bits} bits).")
+            #print(f"  No exact {original_k}-bit FF found. Using largest smaller FF: {target_ff_name} ({target_bits} bits).")
 
             # Adjust cluster: Remove furthest instances until len(current_cluster_instances) == target_bits
             if len(current_cluster_instances) > target_bits:
                 num_to_remove = len(current_cluster_instances) - target_bits
-                print(f"  Adjusting cluster size from {original_k} to {target_bits}. Removing {num_to_remove} furthest instances.")
+                #print(f"  Adjusting cluster size from {original_k} to {target_bits}. Removing {num_to_remove} furthest instances.")
 
                 cluster_center_x = cluster_centers[cluster_label][0]
                 cluster_center_y = cluster_centers[cluster_label][1]
@@ -180,7 +180,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
             else:
                  # This case might occur if k was already <= target_bits (e.g., if target_bits was the only smaller one)
-                 print(f"  Cluster size {original_k} is already <= target bits {target_bits}. No instances removed.")
+                 #print(f"  Cluster size {original_k} is already <= target bits {target_bits}. No instances removed.")
                  k = len(current_cluster_instances) # Ensure k reflects the actual count
 
         # --- Placement Logic (using target_ff_type and potentially modified current_cluster_instances/k) ---
@@ -479,69 +479,70 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
             # Try moving the second instance in the list (simple strategy)
             #instance_to_move_name = overlapping_instances[1]
                 instance_to_move = instances_dict.get(instance_to_move_name)
-
-                if not instance_to_move:
-                    print(f"    Error: Instance '{instance_to_move_name}' not found in instances_dict. Skipping.")
-                    continue
-
-                # Get instance width
-                instance_width = 0
                 if instance_to_move.cell_type in cell_library.flip_flops:
-                    instance_width = cell_library.flip_flops[instance_to_move.cell_type].width
-                elif instance_to_move.cell_type in cell_library.gates:
-                    instance_width = cell_library.gates[instance_to_move.cell_type].width
-                else:
-                    print(f"    Warning: Cell type '{instance_to_move.cell_type}' for instance '{instance_to_move_name}' not found. Cannot determine width. Skipping move.")
-                    continue
+                    if not instance_to_move:
+                        print(f"    Error: Instance '{instance_to_move_name}' not found in instances_dict. Skipping.")
+                        continue
 
-                # Find the row
-                row = placement_rows_map.get(site[1]) # site[1] is the y-coordinate
-                if not row:
-                    # This shouldn't happen if create_site_instance_mappings worked, but check anyway
-                    print(f"    Warning: Could not find placement row for site {site}. Skipping move for {instance_to_move_name}.")
-                    continue
+                    # Get instance width
+                    instance_width = 0
+                    if instance_to_move.cell_type in cell_library.flip_flops:
+                        instance_width = cell_library.flip_flops[instance_to_move.cell_type].width
+                    elif instance_to_move.cell_type in cell_library.gates:
+                        assert False, "We should not move gates"
+                    else:
+                        print(f"    Warning: Cell type '{instance_to_move.cell_type}' for instance '{instance_to_move_name}' not found. Cannot determine width. Skipping move.")
+                        continue
 
-                # Find an adjacent empty site
-                new_site_coords = find_adjacent_empty_site(instance_to_move_name, instance_width, site, row, site_to_instances, max_search_dist=10**(iteration+1))
+                    # Find the row
+                    row = placement_rows_map.get(site[1]) # site[1] is the y-coordinate
+                    if not row:
+                        # This shouldn't happen if create_site_instance_mappings worked, but check anyway
+                        print(f"    Warning: Could not find placement row for site {site}. Skipping move for {instance_to_move_name}.")
+                        continue
 
-                if new_site_coords:
-                    new_x, new_y = new_site_coords
-                    assert new_x != instance_to_move.x
-                    #print(f"    Moving instance '{instance_to_move_name}' from ({instance_to_move.x}, {instance_to_move.y}) to ({new_x}, {new_y})")
+                    # Find an adjacent empty site
+                    new_site_coords = find_adjacent_empty_site(instance_to_move_name, instance_width, site, row, site_to_instances, max_search_dist=10**(iteration+1))
 
-                    # Update the instance object's coordinates directly
-                    instance_to_move.x = new_x
-                    instance_to_move.y = new_y # Y should remain the same (same row)
+                    if new_site_coords:
+                        new_x, new_y = new_site_coords
+                        assert new_x != instance_to_move.x
+                        #print(f"    Moving instance '{instance_to_move_name}' from ({instance_to_move.x}, {instance_to_move.y}) to ({new_x}, {new_y})")
 
-                    # Update site_to_instances incrementally for the next checks in *this* iteration
-                    # 1. Remove instance from all its old sites
-                    old_sites = instance_to_sites.get(instance_to_move_name, [])
-                    print("old_sites", old_sites)
-                    for old_site in old_sites:
-                        print(site_to_instances[old_site])
-                        if old_site in site_to_instances and instance_to_move_name in site_to_instances[old_site]:
-                            site_to_instances[old_site].remove(instance_to_move_name)
-                            # If list becomes empty, optionally remove the key: del site_to_instances[old_site]
+                        # Update the instance object's coordinates directly
+                        instance_to_move.x = new_x
+                        instance_to_move.y = new_y # Y should remain the same (same row)
 
-                    # 2. Add instance to its new sites
-                    num_sites_needed = math.ceil(instance_width / row.site_width)
-                    for i in range(num_sites_needed):
-                        current_site_x = new_x + i * row.site_width
-                        current_site_coords = (current_site_x, new_y)
-                        if current_site_coords not in site_to_instances:
-                            site_to_instances[current_site_coords] = []
-                        # Avoid adding duplicates if somehow already there
-                        if instance_to_move_name not in site_to_instances[current_site_coords]:
-                            site_to_instances[current_site_coords].append(instance_to_move_name)
+                        # Update site_to_instances incrementally for the next checks in *this* iteration
+                        # 1. Remove instance from all its old sites
+                        old_sites = instance_to_sites.get(instance_to_move_name, [])
+                        #print("old_sites", old_sites)
+                        for old_site in old_sites:
+                            #print(site_to_instances[old_site])
+                            if old_site in site_to_instances and instance_to_move_name in site_to_instances[old_site]:
+                                site_to_instances[old_site].remove(instance_to_move_name)
+                                # If list becomes empty, optionally remove the key: del site_to_instances[old_site]
 
-                    # Update instance_to_sites for the moved instance (will be fully rebuilt next iteration)
-                    instance_to_sites[instance_to_move_name] = [ (new_x + i * row.site_width, new_y) for i in range(num_sites_needed)]
+                        # 2. Add instance to its new sites
+                        num_sites_needed = math.ceil(instance_width / row.site_width)
+                        for i in range(num_sites_needed):
+                            current_site_x = new_x + i * row.site_width
+                            current_site_coords = (current_site_x, new_y)
+                            if current_site_coords not in site_to_instances:
+                                site_to_instances[current_site_coords] = []
+                            # Avoid adding duplicates if somehow already there
+                            if instance_to_move_name not in site_to_instances[current_site_coords]:
+                                site_to_instances[current_site_coords].append(instance_to_move_name)
 
-                    moved_count += 1
-                else:
-                    #print(f"    Failed to find a new location for '{instance_to_move_name}' near site {site}.")
-                    failed_moves += 1
-                    # If we fail to move, the overlap persists for the next iteration (or final failure)
+                        # Update instance_to_sites for the moved instance (will be fully rebuilt next iteration)
+                        instance_to_sites[instance_to_move_name] = [ (new_x + i * row.site_width, new_y) for i in range(num_sites_needed)]
+
+                        moved_count += 1
+                        break
+                    else:
+                        #print(f"    Failed to find a new location for '{instance_to_move_name}' near site {site}.")
+                        failed_moves += 1
+                        # If we fail to move, the overlap persists for the next iteration (or final failure)
 
         print(f"  Iteration {iteration + 1} summary: Moved {moved_count} instances, failed to move {failed_moves} instances involved in overlaps.")
         if moved_count == 0 and overlaps_found_this_iter:
@@ -590,8 +591,6 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
 
 
     # 2. Process merged flip-flops
-    merged_old_instance_names = set(old_ff_to_new_ff_map.keys())
-
     for new_ff_name, old_ff_names in new_ff_to_old_ffs_map.items():
         if not old_ff_names: continue # Skip if list is empty
 
@@ -631,7 +630,7 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
                 # Common conventions: D->D0, Q->Q0, CLK->CLK, RST->RST etc.
                 # This might need adjustment based on actual library conventions
                 new_pin_name = ""
-                is_shared_pin = old_pin_name.upper() in ["CLK", "CLOCK", "CK", "RESET", "RST", "SET", "PRESET", "PRE", "CLEAR", "CLR"] # Common shared pins
+                is_shared_pin = old_pin_name.upper() in ["CLK", "RST", "SET", "CLR"] # Common shared pins
 
                 if is_shared_pin:
                     new_pin_name = old_pin_name # Assume shared pins keep their name
@@ -667,23 +666,6 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
                                f"Neither '{new_pin_name}' nor '{old_pin_name}' found in new FF '{new_instance.name}' ({new_instance.cell_type}).")
 
 
-    # 3. Add identity mappings for pins of unmerged instances
-    for instance in original_instances:
-        if instance.name not in merged_old_instance_names:
-            cell = None
-            if instance.cell_type in cell_library.gates:
-                cell = cell_library.gates[instance.cell_type]
-            elif instance.cell_type in cell_library.flip_flops:
-                 # This could be multi-bit FFs present in the original design
-                 cell = cell_library.flip_flops[instance.cell_type]
-            # else: Cell type not found (should have been warned earlier if critical)
-
-            if cell:
-                for pin_name in cell.pins.keys():
-                    full_pin = f"{instance.name}/{pin_name}"
-                    if full_pin not in pin_mapping: # Avoid overwriting if somehow already mapped
-                         pin_mapping[full_pin] = full_pin # Identity mapping
-
     print(f"Created pin mapping for {len(pin_mapping)} pins.")
     return pin_mapping
 
@@ -710,6 +692,7 @@ if __name__ == "__main__":
         # --- Cluster and Merge Flip-Flops ---
         print("\n--- Clustering and Merging Flip-Flops ---")
         updated_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data)
+        print(create_pin_mapping(parsed_data.instances, updated_instances, old_to_new_map, parsed_data.cell_library))
         parsed_data.instances = updated_instances # Update instances in the parsed_data object
 
         print("\n--- Old FF to New FF Mapping (Sample) ---")
@@ -723,9 +706,9 @@ if __name__ == "__main__":
         # -----------------------------------------
 
         # --- Save intermediate state (optional) ---
-        with open("temp2.pkl", 'wb') as f:
-            pickle.dump(parsed_data, f)
-        #with open("temp2.pkl", 'rb') as f:
+        #with open("temp2.pkl", 'wb') as f:
+        #    pickle.dump(parsed_data, f)
+        #with open("temp1.pkl", 'rb') as f:
         #    parsed_data =  pickle.load(f)
 
         # --- Create Site/Instance Mappings AFTER merging ---

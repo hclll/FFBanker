@@ -578,12 +578,11 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
         new full pin names (e.g., "merged_ff/D0").
     """
     final_instances_map = {inst.name: inst for inst in final_instances}
-    original_instances_map = {inst.name: inst for inst in original_instances}
 
     # 1. Create reverse map: new_ff_name -> [old_ff_name1, old_ff_name2, ...]
     new_ff_to_old_ffs_map = defaultdict(list)
     for old_name, new_name in old_ff_to_new_ff_map.items():
-        if old_name in original_instances_map: # Ensure the old FF actually exists
+        if old_name in original_instances: # Ensure the old FF actually exists
              new_ff_to_old_ffs_map[new_name].append(old_name)
         else:
             #print(f"Warning: Old FF '{old_name}' from mapping not found in original instances. Skipping.")
@@ -608,8 +607,8 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
         # Get original instance objects and sort them by coordinate (Y then X)
         old_ff_instances = []
         for name in old_ff_names:
-             if name in original_instances_map:
-                 old_ff_instances.append(original_instances_map[name])
+             if name in original_instances:
+                 old_ff_instances.append(original_instances[name])
              # else: already warned above
 
         if not old_ff_instances: continue # Skip if no valid old instances found
@@ -681,7 +680,7 @@ if __name__ == "__main__":
         #    pickle.dump([updated_instances, old_to_new_map], f)
         #with open("temp1.pkl", 'rb') as f:
         #    updated_instances, old_to_new_map = pickle.load(f)
-        create_pin_mapping(parsed_data.die.instances.values(), updated_instances, old_to_new_map, parsed_data.cell_library)
+        create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
         parsed_data.die.instances = {k:v for k, v in zip([i.name for i in updated_instances], updated_instances)} # Update instances in the parsed_data object
 
         print("\n--- Old FF to New FF Mapping (Sample) ---")

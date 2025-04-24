@@ -5,6 +5,7 @@ from module import Instance, PlacementRow, FlipFlop, Gate, CellLibrary # Added G
 from cluster import perform_mean_shift_clustering
 import math
 from collections import defaultdict # Added defaultdict
+from preprocessing import debanking_all
 
 def find_closest_row(y_coord: float, placement_rows: list[PlacementRow]) -> PlacementRow | None:
     """Finds the placement row closest to the given y-coordinate."""
@@ -617,6 +618,7 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
         # Sort primarily by Y, secondarily by X to assign bit index consistently
         old_ff_instances.sort(key=lambda inst: (inst.original_y, inst.original_x))
 
+        new_instance.original_name = []
         # Map pins for each original FF based on its sorted position (bit_index)
         for bit_index, old_instance in enumerate(old_ff_instances):
             try:
@@ -625,49 +627,36 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
                 print(f"Warning: Cell type '{old_instance.cell_type}' for original FF '{old_instance.name}' not found in library. Skipping its pin mapping.")
                 continue
 
+            new_instance.original_name.append(old_instance.original_name)
             for old_pin_name in old_ff_library_cell.pins.keys():
+                assert isinstance(old_instance.original_name, str)
                 # Determine the corresponding new pin name convention
                 # Common conventions: D->D0, Q->Q0, CLK->CLK, RST->RST etc.
                 # This might need adjustment based on actual library conventions
                 new_pin_name = ""
-                is_shared_pin = old_pin_name.upper() in ["CLK", "RST", "SET", "CLR"] # Common shared pins
-
-                if is_shared_pin:
-                    new_pin_name = old_pin_name # Assume shared pins keep their name
-                elif old_pin_name.upper() == 'D':
+                
+                if old_pin_name.upper() == 'D':
                     new_pin_name = f"D{bit_index}"
                 elif old_pin_name.upper() == 'Q':
                      new_pin_name = f"Q{bit_index}"
                 # Add more rules here if other pin naming conventions exist (e.g., TI, SI, SO for scan chains)
                 else:
-                    # Fallback for potentially indexed pins we don't explicitly handle
-                    # Check if the old pin name itself suggests an index (less common for 1-bit)
-                    # Or assume it might be indexed in the new FF
-                    new_pin_name = f"{old_pin_name}{bit_index}" # Guessing convention
-                    #print(f"Debug: Assuming indexed pin mapping for '{old_pin_name}' -> '{new_pin_name}'")
+                    assert old_pin_name == "CLK"
 
 
                 # Check if the determined new pin name actually exists in the new FF type
-                if new_pin_name in new_ff_library_cell.pins:
-                    old_full_pin = f"{old_instance.name}/{old_pin_name}"
-                    new_full_pin = f"{new_instance.name}/{new_pin_name}"
-                    pin_mapping[old_full_pin] = new_full_pin
-                    #print(f"  Mapped: {old_full_pin} -> {new_full_pin}")
-                else:
-                    # If the indexed version didn't exist, maybe it's a shared pin we missed?
-                    # Try mapping to the original name if that exists in the new FF.
-                    if old_pin_name in new_ff_library_cell.pins:
-                         old_full_pin = f"{old_instance.name}/{old_pin_name}"
-                         new_full_pin = f"{new_instance.name}/{old_pin_name}" # Map to non-indexed version
-                         pin_mapping[old_full_pin] = new_full_pin
-                         #print(f"  Mapped (as shared): {old_full_pin} -> {new_full_pin}")
+                if new_pin_name:
+                    assert new_pin_name in new_ff_library_cell.pins
+                    if old_instance.pin_mapping:
+                        new_instance.pin_mapping[new_pin_name] = (old_instance.pin_mapping[old_pin_name])
                     else:
-                         print(f"Warning: Could not map pin '{old_pin_name}' of old FF '{old_instance.name}'. "
-                               f"Neither '{new_pin_name}' nor '{old_pin_name}' found in new FF '{new_instance.name}' ({new_instance.cell_type}).")
+                        assert old_instance.name == old_instance.original_name
+                        new_instance.pin_mapping[new_pin_name] = (old_instance.original_name, old_pin_name)
 
+        print(new_instance.original_name)
+        print(new_instance.pin_mapping)
+        assert False
 
-    print(f"Created pin mapping for {len(pin_mapping)} pins.")
-    return pin_mapping
 
 
 if __name__ == "__main__":
@@ -678,6 +667,7 @@ if __name__ == "__main__":
     parser = Parser(file_path)
     try:
         parsed_data = parser.parse()
+        debanking_all(parsed_data.die, parsed_data.cell_library, parsed_data.netlist)
         print("Parsing complete.")
         
         if not parsed_data.placement_rows:
@@ -691,8 +681,12 @@ if __name__ == "__main__":
 
         # --- Cluster and Merge Flip-Flops ---
         print("\n--- Clustering and Merging Flip-Flops ---")
-        updated_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data)
-        print(create_pin_mapping(parsed_data.instances, updated_instances, old_to_new_map, parsed_data.cell_library))
+        #updated_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data)
+        #with open("temp1.pkl", 'wb') as f:
+        #    pickle.dump([updated_instances, old_to_new_map], f)
+        with open("temp1.pkl", 'rb') as f:
+            updated_instances, old_to_new_map = pickle.load(f)
+        create_pin_mapping(parsed_data.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
         parsed_data.instances = updated_instances # Update instances in the parsed_data object
 
         print("\n--- Old FF to New FF Mapping (Sample) ---")
@@ -706,8 +700,6 @@ if __name__ == "__main__":
         # -----------------------------------------
 
         # --- Save intermediate state (optional) ---
-        #with open("temp2.pkl", 'wb') as f:
-        #    pickle.dump(parsed_data, f)
         #with open("temp1.pkl", 'rb') as f:
         #    parsed_data =  pickle.load(f)
 

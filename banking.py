@@ -66,10 +66,10 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
     
     if not one_bit_ff_cell_types:
         print("No 1-bit flip-flop types found in the library. Cannot merge.")
-        return parser_obj.instances # Return original instances
+        return parser_obj.die.instances # Return original instances
 
     original_indices = {} # Keep track of original index for later removal
-    for i, inst in enumerate(parser_obj.instances):
+    for i, inst in enumerate(parser_obj.die.instances):
         if inst.cell_type in one_bit_ff_cell_types:
             one_bit_ff_instances.append(inst)
             original_indices[inst.name] = i
@@ -78,7 +78,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
     if not one_bit_ff_instances:
         print("No 1-bit flip-flop instances found in the design.")
-        return parser_obj.instances # Return original instances
+        return parser_obj.die.instances # Return original instances
 
     print(f"Found {len(one_bit_ff_instances)} 1-bit flip-flop instances to cluster.")
 
@@ -92,7 +92,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
     if labels is None or n_clusters <= 0:
         print("Clustering failed or found no clusters.")
-        return parser_obj.instances
+        return parser_obj.die.instances
 
     # 3. Group Instances by Cluster
     clusters: dict[int, list[Instance]] = {}
@@ -236,7 +236,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
 
     # Create the final list of instances
     final_instances = []
-    for i, inst in enumerate(parser_obj.instances):
+    for i, inst in enumerate(parser_obj.die.instances):
         if i not in instances_to_remove_indices:
             final_instances.append(inst)
             
@@ -269,7 +269,7 @@ def create_site_instance_mappings(parser_obj: Parser) -> tuple[dict[tuple[int, i
     cell_library = parser_obj.cell_library
     placement_rows_map = {row.start_y: row for row in parser_obj.placement_rows} # For quick row lookup by y
 
-    for instance in parser_obj.instances:
+    for instance in parser_obj.die.instances:
         # Get instance width from cell library
         instance_width = 0
         if instance.cell_type in cell_library.flip_flops:
@@ -448,7 +448,7 @@ def resolve_overlaps(parser_obj: Parser, max_iterations: int = 10) -> bool:
     print("\n--- Resolving Overlapping Instances ---")
     cell_library = parser_obj.cell_library
     placement_rows_map = {row.start_y: row for row in parser_obj.placement_rows}
-    instances_dict = {inst.name: inst for inst in parser_obj.instances} # For quick lookup
+    instances_dict = {inst.name: inst for inst in parser_obj.die.instances} # For quick lookup
 
     for iteration in range(max_iterations):
         print(f"  Overlap Resolution Iteration {iteration + 1}/{max_iterations}")
@@ -578,7 +578,6 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
         A dictionary mapping old full pin names (e.g., "old_ff/D") to
         new full pin names (e.g., "merged_ff/D0").
     """
-    pin_mapping: dict[str, str] = {}
     final_instances_map = {inst.name: inst for inst in final_instances}
     original_instances_map = {inst.name: inst for inst in original_instances}
 
@@ -588,7 +587,8 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
         if old_name in original_instances_map: # Ensure the old FF actually exists
              new_ff_to_old_ffs_map[new_name].append(old_name)
         else:
-             print(f"Warning: Old FF '{old_name}' from mapping not found in original instances. Skipping.")
+            #print(f"Warning: Old FF '{old_name}' from mapping not found in original instances. Skipping.")
+            pass
 
 
     # 2. Process merged flip-flops
@@ -596,14 +596,14 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
         if not old_ff_names: continue # Skip if list is empty
 
         if new_ff_name not in final_instances_map:
-            print(f"Warning: New FF '{new_ff_name}' from mapping not found in final instances. Skipping mapping for its constituents.")
+            #print(f"Warning: New FF '{new_ff_name}' from mapping not found in final instances. Skipping mapping for its constituents.")
             continue
 
         new_instance = final_instances_map[new_ff_name]
         try:
             new_ff_library_cell = cell_library.flip_flops[new_instance.cell_type]
         except KeyError:
-            print(f"Warning: Cell type '{new_instance.cell_type}' for merged FF '{new_ff_name}' not found in library. Skipping mapping.")
+            #print(f"Warning: Cell type '{new_instance.cell_type}' for merged FF '{new_ff_name}' not found in library. Skipping mapping.")
             continue
 
         # Get original instance objects and sort them by coordinate (Y then X)
@@ -624,7 +624,7 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
             try:
                 old_ff_library_cell = cell_library.flip_flops[old_instance.cell_type]
             except KeyError:
-                print(f"Warning: Cell type '{old_instance.cell_type}' for original FF '{old_instance.name}' not found in library. Skipping its pin mapping.")
+                #print(f"Warning: Cell type '{old_instance.cell_type}' for original FF '{old_instance.name}' not found in library. Skipping its pin mapping.")
                 continue
 
             new_instance.original_name.append(old_instance.original_name)
@@ -672,7 +672,7 @@ if __name__ == "__main__":
         print("\n--- Initial State Summary ---")
         # Create initial mappings before merging/resolving
         initial_site_map, initial_instance_map = create_site_instance_mappings(parsed_data)
-        print(f"Initial instance count: {len(parsed_data.instances)}")
+        print(f"Initial instance count: {len(parsed_data.die.instances)}")
         print(f"Initial occupied sites: {len(initial_site_map)}")
 
         # --- Cluster and Merge Flip-Flops ---
@@ -682,8 +682,8 @@ if __name__ == "__main__":
         #    pickle.dump([updated_instances, old_to_new_map], f)
         with open("temp1.pkl", 'rb') as f:
             updated_instances, old_to_new_map = pickle.load(f)
-        create_pin_mapping(parsed_data.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
-        parsed_data.instances = updated_instances # Update instances in the parsed_data object
+        create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
+        parsed_data.die.instances = updated_instances # Update instances in the parsed_data object
 
         print("\n--- Old FF to New FF Mapping (Sample) ---")
         map_sample_count = 0
@@ -731,7 +731,7 @@ if __name__ == "__main__":
         print("\n--- Final State Summary ---")
         # Re-create mappings to reflect final state after potential resolution
         final_site_map, final_instance_map = create_site_instance_mappings(parsed_data)
-        print(f"Final instance count: {len(parsed_data.instances)}")
+        print(f"Final instance count: {len(parsed_data.die.instances)}")
         print(f"Final occupied sites: {len(final_site_map)}")
         print("\n--- Final Overlap Check ---")
         print_overlaps(final_site_map)

@@ -2,6 +2,7 @@
 from module import Die, CellLibrary, Instance, Netlist, Net, FlipFlop
 from parser import Parser
 from preprocessing import find_single_bit_ff, debanking_all
+from banking import cluster_and_merge_flip_flops, create_pin_mapping, resolve_overlaps
 from output import generate_output_file
 import statistics
 import re
@@ -15,11 +16,6 @@ def run_checker(input_file,output_file): # Checker must be in same directory as 
     result = subprocess.run(["./main",input_file,output_file],capture_output = True);
     success = str(result.stdout); # returns text if checker was successful
     
-    if not success:
-        print("Checker did not pass");
-    else:
-        print("Checker passed");
-    #error = str(result.stderr); # returns text if checker was unsuccessful
     success = success.replace("\\n","\n");
     split_success = success.splitlines();
     
@@ -34,6 +30,7 @@ def run_checker(input_file,output_file): # Checker must be in same directory as 
             new_slack = split_line[7];
 
             if float(new_slack) < float(old_slack): # Checks if slack got more negative (worse)
+                print("slack got more negative for a pin in the new design");
                 decreased_slack[new_pin] = {new_slack,old_pin,old_slack};
 
     return decreased_slack; # Return a dictionary of bad slack pins and associated register names in current design
@@ -103,8 +100,7 @@ def debanking_some(die, cell_lib, netlist, decreased_slack): # decreased_slack i
 if __name__ == "__main__":
     
     # Preprocessing
-    #parser = Parser("bm/sampleCase1")
-    parser = Parser("bm/sampleCase1")
+    parser = Parser("bm/sampleCase")
     parsed_data = parser.parse()
     die = parsed_data.die;
     cell_lib = parsed_data.cell_library;
@@ -112,16 +108,19 @@ if __name__ == "__main__":
     debanking_all(die,cell_lib,netlist);
     
     # Banking
+    final_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data);
+    create_pin_mapping(die.instances,final_instances,old_to_new_map,cell_lib);
+    die.instances = final_instances
+    resolve_overlaps(parsed_data);
 
     # Generate output file of current design 
     generate_output_file(parsed_data);
 
     # Run checker using test input and generated output file.
-    #input_file = str("sampleCase1");
-    input_file = str("bm/sampleCase1");
-    output_file = str("output.txt"); # replace this with output.txt 
+    input_file = str("bm/sampleCase");
+    output_file = str("output.txt");  
     decreased_slack = run_checker(input_file,output_file);
-    print("Decreased slack dictionary:",decreased_slack);
+    #print("Decreased slack dictionary:",decreased_slack);
 
     # Debank more using checker slack results.
     die = parsed_data.die;
@@ -131,7 +130,8 @@ if __name__ == "__main__":
 
     # FINAL Placement fixing HERE
 
-    # Run generate_output_file here for final design. 
+    # Run generate_output_file here for final design.
+    generate_output_file(parsed_data);
     # Make sure names of new instances do not match any of the old names. Easy fix: just add an increasing value to the end of each name string
 
 

@@ -104,7 +104,7 @@ if __name__ == "__main__":
     
     # Preprocessing
     #parser = Parser("bm/sampleCase1")
-    parser = Parser("testcase3.txt")
+    parser = Parser("bm/sampleCase1")
     parsed_data = parser.parse()
     die = parsed_data.die;
     cell_lib = parsed_data.cell_library;
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     # Run checker using test input and generated output file.
     #input_file = str("sampleCase1");
-    input_file = str("testcase3.txt");
+    input_file = str("bm/sampleCase1");
     output_file = str("output.txt"); # replace this with output.txt 
     decreased_slack = run_checker(input_file,output_file);
     print("Decreased slack dictionary:",decreased_slack);

@@ -68,7 +68,7 @@ def debanking_all(die, cell_lib, netlist):
                     new_inst.original_x = inst.x  
                     new_inst.original_y = inst.y
                     new_inst.original_cell_type = inst.cell_type
-                    new_inst.original_name = inst.name
+                    # new_inst.original_name = inst.name
                     bit_instances[bit] = new_inst
                     new_instances[new_name] = new_inst
                 del die.instances[inst_name]
@@ -86,7 +86,7 @@ def debanking_all(die, cell_lib, netlist):
                                     bit = int(bit_str)
                                     if bit in bit_instances:
                                         new_pins.append((bit_instances[bit].name, base))
-                                        bit_instances[bit].pin_mapping[base] = pin_name
+                                        bit_instances[bit].pin_mapping[base] = (instance_name, pin_name)
                                 else:
                                     # duplicate non-bit pins for all bits
                                     for new_inst in bit_instances.values():

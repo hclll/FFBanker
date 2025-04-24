@@ -100,7 +100,7 @@ def debanking_some(die, cell_lib, netlist, decreased_slack): # decreased_slack i
 if __name__ == "__main__":
     
     # Preprocessing
-    parser = Parser("bm/sampleCase")
+    parser = Parser("bm/testcase1_0812.txt")
     parsed_data = parser.parse()
     die = parsed_data.die;
     cell_lib = parsed_data.cell_library;
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     generate_output_file(parsed_data);
 
     # Run checker using test input and generated output file.
-    input_file = str("bm/sampleCase");
+    input_file = str("bm/testcase1_0812.txt");
     output_file = str("output.txt");  
     decreased_slack = run_checker(input_file,output_file);
     #print("Decreased slack dictionary:",decreased_slack);

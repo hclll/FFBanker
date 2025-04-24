@@ -249,7 +249,7 @@ def cluster_and_merge_flip_flops(parser_obj: Parser):
     print(f"Grouped them into {n_clusters} clusters.")
     print(f"Created mapping for {len(old_ff_to_new_ff_map)} original FFs to new merged FFs.")
 
-    return final_instances, old_ff_to_new_ff_map
+    return {i.name:i for i in final_instances}, old_ff_to_new_ff_map
 
 def create_site_instance_mappings(parser_obj: Parser) -> tuple[dict[tuple[int, int], list[str]], dict[str, list[tuple[int, int]]]]:
     """
@@ -577,7 +577,6 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
         A dictionary mapping old full pin names (e.g., "old_ff/D") to
         new full pin names (e.g., "merged_ff/D0").
     """
-    final_instances_map = {inst.name: inst for inst in final_instances}
 
     # 1. Create reverse map: new_ff_name -> [old_ff_name1, old_ff_name2, ...]
     new_ff_to_old_ffs_map = defaultdict(list)
@@ -593,11 +592,11 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
     for new_ff_name, old_ff_names in new_ff_to_old_ffs_map.items():
         if not old_ff_names: continue # Skip if list is empty
 
-        if new_ff_name not in final_instances_map:
+        if new_ff_name not in final_instances:
             #print(f"Warning: New FF '{new_ff_name}' from mapping not found in final instances. Skipping mapping for its constituents.")
             continue
 
-        new_instance = final_instances_map[new_ff_name]
+        new_instance = final_instances[new_ff_name]
         try:
             new_ff_library_cell = cell_library.flip_flops[new_instance.cell_type]
         except KeyError:
@@ -655,8 +654,8 @@ def create_pin_mapping(original_instances: list[Instance], final_instances: list
 
 if __name__ == "__main__":
     # Example Usage:
-    file_path = "bm/testcase1_0812.txt" # Or bm/sampleCase
-    #file_path = "bm/sampleCase" # Or bm/sampleCase
+    #file_path = "bm/testcase1_0812.txt" # Or bm/sampleCase
+    file_path = "bm/sampleCase" # Or bm/sampleCase
     print(f"Parsing file: {file_path}")
     parser = Parser(file_path)
     try:
@@ -681,7 +680,7 @@ if __name__ == "__main__":
         #with open("temp1.pkl", 'rb') as f:
         #    updated_instances, old_to_new_map = pickle.load(f)
         create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
-        parsed_data.die.instances = {k:v for k, v in zip([i.name for i in updated_instances], updated_instances)} # Update instances in the parsed_data object
+        parsed_data.die.instances = updated_instances
 
         print("\n--- Old FF to New FF Mapping (Sample) ---")
         map_sample_count = 0

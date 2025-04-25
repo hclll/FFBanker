@@ -807,11 +807,16 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
                         moved_count += 1
                         break
                     else:
-                        #print(f"    Failed to find a new location for '{instance_to_move_name}' near site {site}.")
+                        print(f"      Failed to find a new location for '{instance_to_move_name}' near site {site}.")
                         failed_moves += 1
                         # If we fail to move, the overlap persists for the next iteration (or final failure)
 
         print(f"  Iteration {iteration + 1} summary: Moved {moved_count} instances, failed to move {failed_moves} instances involved in overlaps.")
+        # Re-create site_to_instances and instance_to_sites after attempting moves in this iteration
+        # This ensures the next iteration starts with an up-to-date view of occupied sites.
+        # Although the incremental update logic above *should* keep it consistent,
+        # re-creating provides a clean state for the next iteration's overlap detection.
+        # site_to_instances, instance_to_sites = create_site_instance_mappings(parser_obj) # This is already done at the start of the loop
         if moved_count == 0 and overlaps_found_this_iter:
             print(f"  Could not resolve remaining overlaps after iteration {iteration + 1}.")
             break # No progress made, exit loop
@@ -941,7 +946,7 @@ if __name__ == "__main__":
 
         # --- Cluster and Merge Flip-Flops (Per Clock Net) ---
         # Call the new function that handles banking per clock net
-        updated_instances, old_to_new_map = banking_each_clock_net(parsed_data)
+        #updated_instances, old_to_new_map = banking_each_clock_net(parsed_data)
 
         # TODO: Verify create_pin_mapping logic with per-clock-net results.
 
@@ -952,15 +957,15 @@ if __name__ == "__main__":
         #    updated_instances, old_to_new_map = pickle.load(f)
 
         #print("\n".join(map(str, old_to_new_map.items())))
-        create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
+        #create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
 
         # Update the main parser object's instances with the final result
-        parsed_data.die.instances = updated_instances
+        #parsed_data.die.instances = updated_instances
 
         #with open("temp1.pkl", 'wb') as f:
         #    pickle.dump(parsed_data, f)
-        #with open("temp1.pkl", 'rb') as f:
-        #    parsed_data = pickle.load(f)
+        with open("temp1.pkl", 'rb') as f:
+            parsed_data = pickle.load(f)
 
 
         # --- Old FF to New FF Mapping (Sample) --- # (This section seems fine)

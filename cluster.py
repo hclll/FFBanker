@@ -31,7 +31,7 @@ def perform_mean_shift_clustering(parser_obj: Parser):
     # n_samples: Number of samples to use. If specified, quantile is ignored.
     # Adjust quantile or n_samples based on dataset size and characteristics if needed.
     #bandwidth = estimate_bandwidth(coordinates, quantile=0.002, n_samples=1000, random_state=42, n_jobs=-1)
-    bandwidth = 2000
+    bandwidth = 3000
 
     if bandwidth <= 0:
         print(f"Estimated bandwidth is {bandwidth}. Clustering cannot proceed.")

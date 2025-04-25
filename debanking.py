@@ -29,9 +29,11 @@ def run_checker(input_file,output_file): # Checker must be in same directory as 
             new_pin = split_line[6];
             new_slack = split_line[7];
 
-            if float(new_slack) < float(old_slack): # Checks if slack got more negative (worse)
+            if float(new_slack) < float(old_slack) and float(new_slack) < 0:# Checks if slack got more negative (worse)
                 print("slack got more negative for a pin in the new design");
                 decreased_slack[new_pin] = {new_slack,old_pin,old_slack};
+                print("Pin in new design with bad slack: ",new_pin);
+                print("Pin in old design whose slack got changed: ",old_pin);
 
     return decreased_slack; # Return a dictionary of bad slack pins and associated register names in current design
 
@@ -100,6 +102,7 @@ def debanking_some(die, cell_lib, netlist, decreased_slack): # decreased_slack i
 if __name__ == "__main__":
     
     # Preprocessing
+    #parser = Parser("bm/sampleCase")
     parser = Parser("bm/testcase1_0812.txt")
     parsed_data = parser.parse()
     die = parsed_data.die;
@@ -117,6 +120,7 @@ if __name__ == "__main__":
     generate_output_file(parsed_data);
 
     # Run checker using test input and generated output file.
+    #input_file = str("bm/sampleCase");
     input_file = str("bm/testcase1_0812.txt");
     output_file = str("output.txt");  
     decreased_slack = run_checker(input_file,output_file);

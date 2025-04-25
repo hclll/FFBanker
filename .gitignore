@@ -173,4 +173,4 @@ cython_debug/
 ff_env/
 
 output.txt
-output/
+Outputs/

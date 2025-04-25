@@ -9,6 +9,7 @@ from debanking import run_checker, debanking_some
 def main():
     # Preprocessing
     parser = Parser("bm/sampleCase")
+    # parser = Parser("bm/testcase1_0812.txt")  
     parsed_data = parser.parse()
     die = parsed_data.die
     cell_lib = parsed_data.cell_library
@@ -16,9 +17,12 @@ def main():
     rows = parsed_data.placement_rows
     debanking_all(die,cell_lib,netlist)
 
-    force_directed_placement(die, netlist, rows, cell_lib, iterations=500, damping=0.8)
+    force_directed_placement(die, netlist, rows, cell_lib, iterations=20, damping=0.8)
     resolve_overlaps(parsed_data)
     generate_output_file(parsed_data, "Outputs/sample_placed.txt")
+    # generate_output_file(parsed_data, "Outputs/testcase1_0812_placed.txt")
+
+    # return
     
     # Banking
     final_instances, old_to_new_map = banking_each_clock_net(parsed_data)
@@ -40,7 +44,7 @@ def main():
     die = parsed_data.die
     cell_lib = parsed_data.cell_library
     netlist = parsed_data.netlist
-    #debanking_some(die,cell_lib,netlist,decreased_slack); 
+    debanking_some(die,cell_lib,netlist,decreased_slack)
 
     # FINAL Placement fixing HERE
 

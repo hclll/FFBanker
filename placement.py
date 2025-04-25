@@ -19,18 +19,21 @@ def force_directed_placement(die, netlist, rows, cell_lib, iterations=100, dampi
             fixed.add(name)
         positions[name] = np.array([inst.x, inst.y], dtype=float)
 
+    instance_to_nets = defaultdict(list)
+    for net in netlist.nets.values():
+        for inst_name, _ in net.pins:
+            if inst_name != "TOP":
+                instance_to_nets[inst_name].append(net)
+
     for _ in range(iterations):
         forces = defaultdict(lambda: np.zeros(2))
 
-        # force calculation per movable cell 
         for inst_name in movable:
-            connected_pins = []  # pins connect to inst_name (exclude itself)
-            for net in netlist.nets.values():
-                pins = [p[0] for p in net.pins]
-                if inst_name in pins:
-                    for other_name, _ in net.pins:
-                        if other_name != inst_name and other_name != "TOP":
-                            connected_pins.append(other_name)
+            connected_pins = set()
+            for net in instance_to_nets[inst_name]:
+                for other_name, _ in net.pins:
+                    if other_name != inst_name and other_name != "TOP":
+                        connected_pins.add(other_name)
 
             for other in connected_pins:
                 if other in positions:
@@ -38,14 +41,13 @@ def force_directed_placement(die, netlist, rows, cell_lib, iterations=100, dampi
                     distance = np.linalg.norm(delta)
                     if distance > 1e-3:
                         force = delta / distance  # unit vector
-                        forces[inst_name] += force  # pull by other
+                        forces[inst_name] += force
 
         # update positions 
         for name in movable:
             velocities[name] = (velocities[name] + forces[name]) * damping
             positions[name] = positions[name].astype(float)
             positions[name] += velocities[name]
-
     for name in movable:
         # snap to site
         best_row = min(rows, key=lambda row: abs(positions[name][1] - row.start_y))
@@ -60,14 +62,17 @@ def force_directed_placement(die, netlist, rows, cell_lib, iterations=100, dampi
         offset = 0
         while (site_x + offset * best_row.site_width, site_y) in die.placed_sites and offset < best_row.total_sites - site_index:
             offset += 1
+            if offset > 10:
+                break
+
         final_x = site_x + offset * best_row.site_width
         # final_x = site_x
         final_y = site_y
 
-        if final_x > 22995:
-            print("right_bound", right_bound)
-            print("site_index", site_index)
-            print(f"Placing {name} at ({final_x}, {final_y})")
+        # if final_x > 22995:
+        #     print("right_bound", right_bound)
+        #     print("site_index", site_index)
+        #     print(f"Placing {name} at ({final_x}, {final_y})")
 
         die.placed_sites.add((final_x, final_y))
         positions[name] = np.array([final_x, final_y])

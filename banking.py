@@ -17,7 +17,7 @@ def find_closest_row(y_coord, placement_rows):
     closest_row = min(placement_rows, key=lambda row: abs(row.start_y - y_coord))
     return closest_row
 
-def calculate_placement(cluster_center_x, new_ff_width, row):
+def calculate_placement(cluster_center_x, new_ff_width, new_ff_height, row):
     """Calculates a valid x-coordinate for the new flip-flop within the row."""
     
     # Snap the cluster center x to the nearest site start
@@ -27,6 +27,10 @@ def calculate_placement(cluster_center_x, new_ff_width, row):
     # Ensure the potential x is within the row bounds
     potential_x = max(row.start_x, potential_x) 
     
+    if new_ff_height > row.site_height:
+        print(f"Warning: Cannot fit FF with height {new_ff_height} in row starting at y={row.start_y} with height {row.site_height}")
+        return None # Indicate placement failure
+
     # Ensure the flip-flop fits within the row
     if potential_x + new_ff_width <= row.start_x + row.total_sites * row.site_width:
         return potential_x
@@ -193,7 +197,7 @@ def cluster_and_merge_flip_flops(parser_obj, index):
             closest_row = find_closest_row(cluster_center_y, parser_obj.placement_rows)
 
             if closest_row:
-                new_x = calculate_placement(cluster_center_x, target_ff_type.width, closest_row)
+                new_x = calculate_placement(cluster_center_x, target_ff_type.width, target_ff_type.height, closest_row)
 
                 if new_x is not None:
                     # Placement successful
@@ -306,9 +310,6 @@ def create_site_instance_mappings(parser_obj):
 
         # Check if instance width is a multiple of site width
         num_sites_float = instance_width / row.site_width
-        if abs(num_sites_float - round(num_sites_float)) > 1e-6: # Use tolerance
-            print(f"Warning: Instance '{instance.name}' width ({instance_width}) is not a multiple of site width ({row.site_width}) in row y={row.start_y}. Skipping mapping.")
-            continue
         num_sites = round(num_sites_float) # Use rounded value after check
 
         if num_sites <= 0:
@@ -497,7 +498,7 @@ def find_adjacent_empty_site(instance_name, instance_width, current_site, row, s
 
     # Search Right then Left
     for direction in [1, -1]: # 1 for right, -1 for left 
-        for i in range(1, max_search_dist + 1): # TODO probably should switch to distance then direction
+        for i in range(0, max_search_dist + 1): # TODO probably should switch to distance then direction
             potential_start_site_x = start_x + direction * i * row.site_width
             potential_site_coords = (potential_start_site_x, start_y)
 
@@ -551,6 +552,7 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
         True if all overlaps were resolved, False otherwise.
     """
     print("\n--- Resolving Overlapping Instances ---")
+    assert "C102260" in parser_obj.die.instances
     cell_library = parser_obj.cell_library
     placement_rows_map = {row.start_y: row for row in parser_obj.placement_rows}
 
@@ -643,7 +645,6 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
                         instance_to_sites[instance_to_move_name] = [ (new_x + i * row.site_width, new_y) for i in range(num_sites_needed)]
 
                         moved_count += 1
-                        break
                     else:
                         #print(f"    Failed to find a new location for '{instance_to_move_name}' near site {site}.")
                         failed_moves += 1
@@ -804,27 +805,13 @@ if __name__ == "__main__":
         # Update the main parser object's instances with the final result
         parsed_data.die.instances = updated_instances
 
+        #with open("temp1.pkl", 'wb') as f:
+        #    pickle.dump(parsed_data, f)
+        #with open("temp1.pkl", 'rb') as f:
+        #    parsed_data = pickle.load(f)
+
 
         # --- Old FF to New FF Mapping (Sample) --- # (This section seems fine)
-        print("\n--- Old FF to New FF Mapping (Sample) ---")
-        map_sample_count = 0
-        for old_ff, new_ff in old_to_new_map.items():
-            if map_sample_count >= 5: break
-            print(f"  Original: {old_ff} -> Merged: {new_ff}")
-            map_sample_count += 1
-        if not old_to_new_map:
-            print("  No FFs were merged, mapping is empty.")
-        # -----------------------------------------
-
-
-        # --- Save intermediate state (optional) --- # (This section seems fine)
-        #with open("temp1.pkl", 'wb') as f:
-        #    pickle.dump([updated_instances, old_to_new_map], f)
-        #with open("temp1.pkl", 'rb') as f:
-        #    updated_instances, old_to_new_map = pickle.load(f)
-        #create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
-        #parsed_data.die.instances = updated_instances
-
         #print("\n--- Old FF to New FF Mapping (Sample) ---")
         #map_sample_count = 0
         #for old_ff, new_ff in old_to_new_map.items():
@@ -834,24 +821,6 @@ if __name__ == "__main__":
         #if not old_to_new_map:
         #    print("  No FFs were merged, mapping is empty.")
         # -----------------------------------------
-
-        # --- Save intermediate state (optional) ---
-        #with open("temp1.pkl", 'rb') as f:
-        #    updated_instances, old_to_new_map = pickle.load(f)
-
-        print("\n--- Old FF to New FF Mapping (Sample) ---")
-        map_sample_count = 0
-        for old_ff, new_ff in old_to_new_map.items():
-            if map_sample_count >= 5: break
-            print(f"  Original: {old_ff} -> Merged: {new_ff}")
-            map_sample_count += 1
-        if not old_to_new_map:
-            print("  No FFs were merged, mapping is empty.")
-        # -----------------------------------------
-
-        # --- Save intermediate state (optional) ---
-        #with open("temp1.pkl", 'rb') as f:
-        #    parsed_data =  pickle.load(f)
 
         # --- Create Site/Instance Mappings AFTER merging ---
         print("\nCreating site-instance mappings post-merge...")
@@ -879,6 +848,9 @@ if __name__ == "__main__":
              resolve_overlaps(parsed_data) # Modify parsed_data.instances in-place
         else:
              print("\nNo overlaps to resolve post-merge.")
+
+        site_map, instance_map = create_site_instance_mappings(parsed_data)
+        assert not print_overlaps(site_map)
         # ------------------------
 
         # --- Final Check and Summary ---

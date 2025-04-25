@@ -1,25 +1,15 @@
-CellInst 6
-Inst reg1 SVT_FF_1 5952 3600
-Inst reg2 SVT_FF_1 1278 3600
-Inst reg3 SVT_FF_1 1278 6000
-Inst reg4 SVT_FF_1 3615 3600
-Inst reg5_bit0 SVT_FF_1 2567 3600
-Inst reg5_bit1 SVT_FF_1 2567 3605
-reg1/D map reg1/D
-reg1/CLK map reg1/CLK
-reg1/Q map reg1/Q
-reg2/D map reg2/D
-reg2/CLK map reg2/CLK
-reg2/Q map reg2/Q
-reg3/D map reg3/D
-reg3/CLK map reg3/CLK
-reg3/Q map reg3/Q
-reg4/D map reg4/D
-reg4/CLK map reg4/CLK
-reg4/Q map reg4/Q
-reg5/D0 map reg5_bit0/D
-reg5/CLK map reg5_bit0/CLK
-reg5/Q0 map reg5_bit0/Q
-reg5/D1 map reg5_bit1/D
-reg5/CLK map reg5_bit1/CLK
-reg5/Q1 map reg5_bit1/Q
+CellInst 3
+Inst new_reg1 SVT_FF_1 5952 3600
+Inst new_reg3 SVT_FF_1 1278 6000
+Inst new_merged_cluster_0_ff2 SVT_FF_2 3045 3600
+reg1/D map new_reg1/D
+reg1/CLK map new_reg1/CLK
+reg1/Q map new_reg1/Q
+reg3/D map new_reg3/D
+reg3/CLK map new_reg3/CLK
+reg3/Q map new_reg3/Q
+reg2/D map new_merged_cluster_0_ff2/D0
+reg2/Q map new_merged_cluster_0_ff2/Q0
+reg4/D map new_merged_cluster_0_ff2/D1
+reg4/Q map new_merged_cluster_0_ff2/Q1
+reg4/CLK map merged_cluster_0_ff2/CLK

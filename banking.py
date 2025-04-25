@@ -437,14 +437,14 @@ def banking_each_clock_net(parser_obj: Parser):
         print(f"  Merging results: {len(merged_instances_for_net)} instances returned from banking, {len(map_for_net)} mappings created for this group.")
         final_instances.update(merged_instances_for_net) # Update the main instance dict
 
+        old_len = len(final_old_to_new_map)
         final_old_to_new_map.update(map_for_net) # Update the main mapping dict
+        assert len(final_old_to_new_map) >= old_len
         index += 1
 
     print(f"\nBanking per clock net complete.")
     print(f"Final instance count: {len(final_instances)}")
     print(f"Total mappings created across all groups: {len(final_old_to_new_map)}")
-    print("\n".join(map(str, final_old_to_new_map)))
-    assert False
 
     return final_instances, final_old_to_new_map
 
@@ -795,8 +795,8 @@ if __name__ == "__main__":
         #with open("temp1.pkl", 'wb') as f:
         #    pickle.dump([updated_instances, old_to_new_map], f)
         # --- Create Pin Mapping using original state and final state ---
-        with open("temp1.pkl", 'rb') as f:
-            updated_instances, old_to_new_map = pickle.load(f)
+        #with open("temp1.pkl", 'rb') as f:
+        #    updated_instances, old_to_new_map = pickle.load(f)
 
         print("\n".join(map(str, old_to_new_map.items())))
         create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)

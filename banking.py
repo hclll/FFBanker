@@ -4,8 +4,10 @@ from parser import Parser
 from module import Instance, PlacementRow, FlipFlop, Gate, CellLibrary # Added Gate and CellLibrary
 from cluster import perform_mean_shift_clustering
 import math
-from collections import defaultdict # Added defaultdict
-from preprocessing import debanking_all
+from collections import defaultdict
+from preprocessing import debanking_all, Die
+from module import Instance # Ensure Instance is imported
+import time
 
 def find_closest_row(y_coord, placement_rows):
     """Finds the placement row closest to the given y-coordinate."""
@@ -41,7 +43,7 @@ def calculate_placement(cluster_center_x, new_ff_width, row):
             return None # Indicate placement failure
 
 
-def cluster_and_merge_flip_flops(parser_obj):
+def cluster_and_merge_flip_flops(parser_obj, index):
     """
     Clusters 1-bit flip-flop instances and merges them into higher-bit flip-flops 
     aligned with placement rows.
@@ -88,7 +90,8 @@ def cluster_and_merge_flip_flops(parser_obj):
             self.instances = instances
             
     temp_parser = TempParser(one_bit_ff_instances)
-    labels, cluster_centers, n_clusters, _ = perform_mean_shift_clustering(temp_parser)
+    
+    labels, cluster_centers, n_clusters = perform_mean_shift_clustering(temp_parser)
 
     if labels is None or n_clusters <= 0:
         print("Clustering failed or found no clusters.")
@@ -113,7 +116,7 @@ def cluster_and_merge_flip_flops(parser_obj):
         if k <= 1: # Don't merge clusters of size 1
              continue 
 
-        print(f"Processing cluster {cluster_label} with {k} instances.")
+        #print(f"Processing cluster {cluster_label} with {k} instances.")
 
         # Check if a k-bit FF exists or find the largest smaller one
         exact_ff_type: FlipFlop | None = None
@@ -142,12 +145,12 @@ def cluster_and_merge_flip_flops(parser_obj):
         if exact_ff_type and exact_ff_name:
             target_ff_type = exact_ff_type
             target_ff_name = exact_ff_name
-            print(f"  Found exact matching {k}-bit FF type: {target_ff_name}")
+            #print(f"  Found exact matching {k}-bit FF type: {target_ff_name}")
         elif best_smaller_ff_type and best_smaller_ff_name:
             target_ff_type = best_smaller_ff_type
             target_ff_name = best_smaller_ff_name
             target_bits = target_ff_type.bits
-            print(f"  No exact {original_k}-bit FF found. Using largest smaller FF: {target_ff_name} ({target_bits} bits).")
+            #print(f"  No exact {original_k}-bit FF found. Using largest smaller FF: {target_ff_name} ({target_bits} bits).")
 
             # Adjust cluster: Remove furthest instances until len(current_cluster_instances) == target_bits
             if len(current_cluster_instances) > target_bits:
@@ -196,7 +199,7 @@ def cluster_and_merge_flip_flops(parser_obj):
                     # Placement successful
                     new_y = closest_row.start_y
                     # Create new merged instance name using the target FF's bits, not the potentially reduced k
-                    new_instance_name = f"merged_cluster_{cluster_label}_ff{target_ff_type.bits}"
+                    new_instance_name = f"{index}_merged_cluster_{cluster_label}_ff{target_ff_type.bits}"
 
                     new_merged_instance = Instance(new_instance_name, target_ff_name, new_x, new_y)
                     new_instances.append(new_merged_instance)
@@ -233,13 +236,14 @@ def cluster_and_merge_flip_flops(parser_obj):
             
     final_instances.extend(new_instances) # Add the newly created merged instances
 
-    print(f"Removed {len(instances_to_remove_indices)} original 1-bit FFs.")
-    print(f"Added {len(new_instances)} merged FFs.")
-    print(f"Final instance count: {len(final_instances)}")
-    print(f"Found a total of {len(temp_parser.instances)} 1-bit ffs")
-    print(f"Grouped them into {n_clusters} clusters.")
-    print(f"Created mapping for {len(old_ff_to_new_ff_map)} original FFs to new merged FFs.")
+    #print(f"Removed {len(instances_to_remove_indices)} original 1-bit FFs.")
+    #print(f"Added {len(new_instances)} merged FFs.")
+    #print(f"Final instance count: {len(final_instances)}")
+    #print(f"Found a total of {len(temp_parser.instances)} 1-bit ffs")
+    #print(f"Grouped them into {n_clusters} clusters.")
+    #print(f"Created mapping for {len(old_ff_to_new_ff_map)} original FFs to new merged FFs.")
 
+    #print(f"Clustering took {time.time()-start} seconds")
     return {i.name:i for i in final_instances}, old_ff_to_new_ff_map
 
 def create_site_instance_mappings(parser_obj):
@@ -333,6 +337,116 @@ def create_site_instance_mappings(parser_obj):
 
 
     return dict(site_to_instances), dict(instance_to_sites) # Convert back to regular dicts
+
+
+def banking_each_clock_net(parser_obj: Parser):
+    """
+    Separates flip-flop instances by clock net and performs banking on each group.
+
+    Args:
+        parser_obj: The Parser object containing the design data.
+
+    Returns:
+        A tuple containing:
+            - A dictionary of final instances (name -> Instance object).
+            - A dictionary mapping original 1-bit FF instance names to the
+              name of the merged FF instance they became part of.
+    """
+    print("\n--- Banking Flip-Flops Separately for Each Clock Net ---")
+
+    # 1. Identify FF instances and their clock nets
+    ffs_by_clock_net = defaultdict(list)
+    ff_instances = {}
+    other_instances = {}
+    ff_cell_types = set(parser_obj.cell_library.flip_flops.keys())
+
+    for inst_name, inst in parser_obj.die.instances.items():
+        if inst.cell_type in ff_cell_types:
+            ff_instances[inst_name] = inst
+        else:
+            other_instances[inst_name] = inst
+
+    print(f"Identified {len(ff_instances)} flip-flop instances and {len(other_instances)} other instances.")
+
+    # Find clock net for each FF
+    found_clocks_for = set()
+    for net_name, net in parser_obj.netlist.nets.items():
+        for pin in net.pins:
+            # Assuming pin format is "instance_name/pin_name"
+            if 'CLK' in pin:
+                instance_name = pin[0]
+                if instance_name in ff_instances and instance_name not in found_clocks_for:
+                    ffs_by_clock_net[net_name].append(instance_name)
+                    found_clocks_for.add(instance_name)
+                    # Optimization: Stop checking pins for this net once a CLK is found,
+                    # or continue if a net might drive multiple different FFs' clocks.
+                    # The grouping logic handles multiple FFs on the same net correctly anyway.
+
+    ffs_without_clock = len(ff_instances) - len(found_clocks_for)
+    if ffs_without_clock > 0:
+        print(f"Warning: Could not find clock net connection for {ffs_without_clock} flip-flop instances. They will be grouped separately.")
+
+    print(f"Grouped FFs into {len(ffs_by_clock_net)} clock net groups (key=None for unconnected).")
+
+    # 3. Process Each Group
+    final_instances = other_instances # Start with non-FF instances
+    final_old_to_new_map = {}
+    index = 0
+
+    for clock_net, ff_group in ffs_by_clock_net.items():
+        group_name = f"Clock Net '{clock_net}'" if clock_net else "FFs with Unconnected Clock"
+        print(f"\nProcessing {group_name} with {len(ff_group)} FFs...")
+
+        if len(ff_group) <= 1:
+            print("  Group size <= 1, skipping banking. Keeping original FF(s).")
+            for inst in ff_group:
+                final_instances[inst.name] = inst # Add the single/unbankable FF to the final list
+            continue
+        else:
+            ff_group = {name:parser_obj.die.instances[name] for name in ff_group}
+
+        # Create a temporary parser object containing only the FFs for this group
+        # Need to copy necessary attributes from the original parser object
+        temp_parser_for_group = Parser(parser_obj.file_path) # Use file_path for init, though parse() isn't called
+
+        # Copy essential attributes needed by cluster_and_merge_flip_flops and its helpers
+        temp_parser_for_group.cell_library = parser_obj.cell_library
+        temp_parser_for_group.placement_rows = parser_obj.placement_rows
+        # Copy parameters if they are used downstream (check cluster_and_merge and placement logic)
+        temp_parser_for_group.alpha = parser_obj.alpha
+        temp_parser_for_group.beta = parser_obj.beta
+        temp_parser_for_group.gamma = parser_obj.gamma
+        temp_parser_for_group.lambda_ = parser_obj.lambda_
+        # Copy other potentially relevant info if needed
+        # temp_parser_for_group.timing_info = parser_obj.timing_info
+        # temp_parser_for_group.power_info = parser_obj.power_info
+        # temp_parser_for_group.bin_constraints = parser_obj.bin_constraints
+
+        # CRITICAL: Use a deep copy of the die object to isolate instance list modification
+        #temp_parser_for_group.die = copy.deepcopy(parser_obj.die)
+        # Set the instances for this temporary parser to *only* the FFs in the current group
+        temp_parser_for_group.die = Die(0, 0, 10, 10)
+        temp_parser_for_group.die.instances = ff_group
+
+        print(f"  Calling cluster_and_merge_flip_flops for {len(temp_parser_for_group.die.instances)} FFs in this group.")
+        # cluster_and_merge_flip_flops returns a dict of instances (merged + unmerged from the input group)
+        # and the mapping for the merged ones within that group.
+        merged_instances_for_net, map_for_net = cluster_and_merge_flip_flops(temp_parser_for_group, index)
+
+        # Add results to the final collections
+        print(f"  Merging results: {len(merged_instances_for_net)} instances returned from banking, {len(map_for_net)} mappings created for this group.")
+        final_instances.update(merged_instances_for_net) # Update the main instance dict
+
+        final_old_to_new_map.update(map_for_net) # Update the main mapping dict
+        index += 1
+
+    print(f"\nBanking per clock net complete.")
+    print(f"Final instance count: {len(final_instances)}")
+    print(f"Total mappings created across all groups: {len(final_old_to_new_map)}")
+    print("\n".join(map(str, final_old_to_new_map)))
+    assert False
+
+    return final_instances, final_old_to_new_map
 
 
 def print_overlaps(site_to_instances, verbose=False):
@@ -581,6 +695,7 @@ def create_pin_mapping(original_instances, final_instances, old_ff_to_new_ff_map
 
     # 2. Process merged flip-flops
     for new_ff_name, old_ff_names in new_ff_to_old_ffs_map.items():
+        print(f"{new_ff_name} is the banked results of these flip flops: {old_ff_names}")
         if not old_ff_names: continue # Skip if list is empty
 
         if new_ff_name not in final_instances:
@@ -612,7 +727,7 @@ def create_pin_mapping(original_instances, final_instances, old_ff_to_new_ff_map
             try:
                 old_ff_library_cell = cell_library.flip_flops[old_instance.cell_type]
             except KeyError:
-                #print(f"Warning: Cell type '{old_instance.cell_type}' for original FF '{old_instance.name}' not found in library. Skipping its pin mapping.")
+                print(f"Warning: Cell type '{old_instance.cell_type}' for original FF '{old_instance.name}' not found in library. Skipping its pin mapping.")
                 continue
 
             new_instance.original_name.append(old_instance.original_name)
@@ -634,13 +749,12 @@ def create_pin_mapping(original_instances, final_instances, old_ff_to_new_ff_map
 
                 # Check if the determined new pin name actually exists in the new FF type
                 if new_pin_name:
-                    assert new_pin_name in new_ff_library_cell.pins
+                    assert new_pin_name in new_ff_library_cell.pins, f"{new_pin_name}, {new_ff_library_cell.pins}"
                     if old_instance.pin_mapping:
                         new_instance.pin_mapping[new_pin_name] = (old_instance.pin_mapping[old_pin_name])
                     else:
                         assert old_instance.name == old_instance.original_name
                         new_instance.pin_mapping[new_pin_name] = (old_instance.original_name, old_pin_name)
-
 
 
 if __name__ == "__main__":
@@ -663,15 +777,67 @@ if __name__ == "__main__":
         print(f"Initial instance count: {len(parsed_data.die.instances)}")
         print(f"Initial occupied sites: {len(initial_site_map)}")
 
-        # --- Cluster and Merge Flip-Flops ---
-        print("\n--- Clustering and Merging Flip-Flops ---")
-        updated_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data)
+        # --- Cluster and Merge Flip-Flops (Per Clock Net) ---
+        # Call the new function that handles banking per clock net
+        updated_instances, old_to_new_map = banking_each_clock_net(parsed_data)
+        # The rest of the logic remains largely the same, operating on the results
+        # of the per-clock-net banking.
+
+        # --- Pin Mapping (Needs original instances before modification) ---
+        # Note: create_pin_mapping might need adjustment if it relies on the *original*
+        # parser_obj.die.instances structure before banking_each_clock_net modified it.
+        # Let's assume it works with the final updated_instances dict for now.
+        # We might need to pass the original instances explicitly if issues arise.
+        # TODO: Verify create_pin_mapping logic with per-clock-net results.
+        # It seems create_pin_mapping needs the *original* instances dict before any merging.
+        # Let's store it before calling banking_each_clock_net.
+
+        #with open("temp1.pkl", 'wb') as f:
+        #    pickle.dump([updated_instances, old_to_new_map], f)
+        # --- Create Pin Mapping using original state and final state ---
+        with open("temp1.pkl", 'rb') as f:
+            updated_instances, old_to_new_map = pickle.load(f)
+
+        print("\n".join(map(str, old_to_new_map.items())))
+        create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
+
+        # Update the main parser object's instances with the final result
+        parsed_data.die.instances = updated_instances
+
+
+        # --- Old FF to New FF Mapping (Sample) --- # (This section seems fine)
+        print("\n--- Old FF to New FF Mapping (Sample) ---")
+        map_sample_count = 0
+        for old_ff, new_ff in old_to_new_map.items():
+            if map_sample_count >= 5: break
+            print(f"  Original: {old_ff} -> Merged: {new_ff}")
+            map_sample_count += 1
+        if not old_to_new_map:
+            print("  No FFs were merged, mapping is empty.")
+        # -----------------------------------------
+
+
+        # --- Save intermediate state (optional) --- # (This section seems fine)
         #with open("temp1.pkl", 'wb') as f:
         #    pickle.dump([updated_instances, old_to_new_map], f)
         #with open("temp1.pkl", 'rb') as f:
         #    updated_instances, old_to_new_map = pickle.load(f)
-        create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
-        parsed_data.die.instances = updated_instances
+        #create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
+        #parsed_data.die.instances = updated_instances
+
+        #print("\n--- Old FF to New FF Mapping (Sample) ---")
+        #map_sample_count = 0
+        #for old_ff, new_ff in old_to_new_map.items():
+        #    if map_sample_count >= 5: break
+        #    print(f"  Original: {old_ff} -> Merged: {new_ff}")
+        #    map_sample_count += 1
+        #if not old_to_new_map:
+        #    print("  No FFs were merged, mapping is empty.")
+        # -----------------------------------------
+
+        # --- Save intermediate state (optional) ---
+        #with open("temp1.pkl", 'rb') as f:
+        #    updated_instances, old_to_new_map = pickle.load(f)
 
         print("\n--- Old FF to New FF Mapping (Sample) ---")
         map_sample_count = 0

@@ -2,7 +2,7 @@
 from module import Die, CellLibrary, Instance, Netlist, Net, FlipFlop
 from parser import Parser
 from preprocessing import find_single_bit_ff, debanking_all
-from banking import cluster_and_merge_flip_flops, create_pin_mapping, resolve_overlaps
+from banking import cluster_and_merge_flip_flops, create_pin_mapping, resolve_overlaps, banking_each_clock_net
 from output import generate_output_file
 import statistics
 import re
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     debanking_all(die,cell_lib,netlist);
     
     # Banking
-    final_instances, old_to_new_map = cluster_and_merge_flip_flops(parsed_data);
+    final_instances, old_to_new_map = banking_each_clock_net(parsed_data);
     create_pin_mapping(die.instances,final_instances,old_to_new_map,cell_lib);
     die.instances = final_instances
     resolve_overlaps(parsed_data);
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     die = parsed_data.die;
     cell_lib = parsed_data.cell_library;
     netlist = parsed_data.netlist;
-    debanking_some(die,cell_lib,netlist,decreased_slack); 
+    #debanking_some(die,cell_lib,netlist,decreased_slack); 
 
     # FINAL Placement fixing HERE
 

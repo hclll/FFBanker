@@ -798,7 +798,7 @@ if __name__ == "__main__":
         #with open("temp1.pkl", 'rb') as f:
         #    updated_instances, old_to_new_map = pickle.load(f)
 
-        print("\n".join(map(str, old_to_new_map.items())))
+        #print("\n".join(map(str, old_to_new_map.items())))
         create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
 
         # Update the main parser object's instances with the final result

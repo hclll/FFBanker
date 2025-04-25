@@ -4,7 +4,7 @@ from preprocessing import annotate_ff_features, find_single_bit_ff, debanking_al
 import statistics
 import re
 
-def generate_output_file(parsed_data): 
+def generate_output_file(parsed_data, file_name="output.txt"): 
 
     # Access cell library
     cell_lib = parsed_data.cell_library;
@@ -20,7 +20,7 @@ def generate_output_file(parsed_data):
             instances[instance] = all_instances[instance];
 
     # Write instance names and mappings to output.txt file
-    with open("output.txt","w") as file:
+    with open(file_name,"w") as file:
 
         # Write number of instances in new design
         file.write("CellInst " + str(len(instances))+"\n");
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     debanking_all(parsed_data.die, cell_lib, netlist)
     
     # Generate output file mapping current design to the old design
-    generate_output_file(parsed_data);
+    generate_output_file(parsed_data)
        
     
 

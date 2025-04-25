@@ -1,0 +1,17 @@
+CellInst 4
+Inst new_reg1 SVT_FF_1 5781 3600
+Inst new_reg2 SVT_FF_1 1392 3600
+Inst new_reg3 SVT_FF_1 1392 6000
+Inst new_reg4 SVT_FF_1 3558 3600
+reg1/D map new_reg1/D
+reg1/CLK map new_reg1/CLK
+reg1/Q map new_reg1/Q
+reg2/D map new_reg2/D
+reg2/CLK map new_reg2/CLK
+reg2/Q map new_reg2/Q
+reg3/D map new_reg3/D
+reg3/CLK map new_reg3/CLK
+reg3/Q map new_reg3/Q
+reg4/D map new_reg4/D
+reg4/CLK map new_reg4/CLK
+reg4/Q map new_reg4/Q

@@ -171,3 +171,6 @@ cython_debug/
 .pypirc
 
 ff_env/
+
+output.txt
+Outputs/

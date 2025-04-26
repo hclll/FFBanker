@@ -669,7 +669,7 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
         True if all overlaps were resolved, False otherwise.
     """
     print("\n--- Resolving Overlapping Instances ---")
-    assert "C102260" in parser_obj.die.instances
+    # assert "C102260" in parser_obj.die.instances
     cell_library = parser_obj.cell_library
     placement_rows_map = {row.start_y: row for row in parser_obj.placement_rows}
 

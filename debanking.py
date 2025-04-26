@@ -82,7 +82,8 @@ def debanking_some(die, cell_lib, netlist, decreased_slack): # decreased_slack i
                                     bit = int(bit_str)
                                     if bit in bit_instances:
                                         new_pins.append((bit_instances[bit].name, base))
-                                        bit_instances[bit].pin_mapping[base] = pin_name
+                                        # bit_instances[bit].pin_mapping[base] = pin_name
+                                        bit_instances[bit].pin_mapping[base] = inst.pin_mapping[(instance_name, pin_name)] # Use the original pin mapping
                                 else:
                                     # duplicate non-bit pins for all bits
                                     for new_inst in bit_instances.values():

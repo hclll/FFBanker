@@ -19,7 +19,7 @@ def main():
 
     force_directed_placement(die, netlist, rows, cell_lib, iterations=20, damping=0.8)
     resolve_overlaps(parsed_data)
-    generate_output_file(parsed_data, "Outputs/sample_placed.txt")
+    # generate_output_file(parsed_data, "Outputs/sample_placed.txt")
     # generate_output_file(parsed_data, "Outputs/testcase1_0812_placed.txt")
 
     # return
@@ -31,7 +31,7 @@ def main():
     resolve_overlaps(parsed_data)
 
     # Generate output file of current design 
-    generate_output_file(parsed_data, "Outputs/sample_banked.txt")
+    # generate_output_file(parsed_data, "Outputs/sample_banked.txt")
 
     # Run checker using test input and generated output file.
     input_file = str("bm/sampleCase")

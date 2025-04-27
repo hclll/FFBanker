@@ -56,17 +56,37 @@ def debanking_some(die, cell_lib, netlist, decreased_slack): # decreased_slack i
             # Check that FF is MBFF and that its name is included in the key of the decreased_slack dictionary.
             if ff.bits > 1 and in_dict: 
                 print(f"Debanking {inst_name} ({ff.bits}-bit FF) at ({inst.x}, {inst.y})")
-                # create bit-indexed instance
-                bit_instances = {}
+                
+                already_mapped_pins = [];
+
                 for bit in range(ff.bits):
-                    new_name = f"{inst.name}_bit{bit}"; # new name should be old name of original single-bit FF
+                    new_name = f"{inst.name}_bit{bit}"; 
                     new_inst = Instance(new_name, single_bit_ff_type, inst.x, inst.y + bit * 5)
                     new_inst.original_x = inst.original_x # Don't need to store intermediate mapping info 
                     new_inst.original_y = inst.original_y # The debanked FFs new info should be old instance info
                     new_inst.original_cell_type = inst.original_cell_type  
                     new_inst.original_name = inst.original_name 
-                    bit_instances[bit] = new_inst
                     new_instances[new_name] = new_inst
+                    
+                    d_mapped = False;
+                    q_mapped = False;
+                    
+                    for MBFF_pin in inst.pin_mapping:
+                        if MBFF_pin not in already_mapped_pins:
+                            if "D" in str(MBFF_pin):
+                                new_inst.pin_mapping["D"] = inst.pin_mapping[MBFF_pin];
+                                d_mapped = True;
+                            else: # only other type should be Q in pin_mapping
+                                new_inst.pin_mapping["Q"] = inst.pin_mapping[MBFF_pin];
+                                q_mapped = True;
+                            #print("dmap: ",d_mapped);
+                            #print("qmap: ",q_mapped);
+                            already_mapped_pins.append(MBFF_pin);
+                            if d_mapped == True and q_mapped == True:
+                                break
+
+                    print("banked FF instance's pin_mapping: ", inst.pin_mapping);
+                    print("new instance's pin_mapping: ", new_inst.pin_mapping);                
                 del die.instances[inst_name]
 
                 # update netlist
@@ -74,6 +94,8 @@ def debanking_some(die, cell_lib, netlist, decreased_slack): # decreased_slack i
                 for net in netlist.nets.values():
                     new_pins = []
                     for instance_name, pin_name in net.pins:
+                        #print("instance_name: ", instance_name);
+                        #print("inst.name: ", inst.name);
                         if instance_name == inst.name:
                             match = pattern.fullmatch(pin_name)
                             if match:
@@ -82,7 +104,7 @@ def debanking_some(die, cell_lib, netlist, decreased_slack): # decreased_slack i
                                     bit = int(bit_str)
                                     if bit in bit_instances:
                                         new_pins.append((bit_instances[bit].name, base))
-                                        # bit_instances[bit].pin_mapping[base] = pin_name
+                                        bit_instances[bit].pin_mapping[base] = pin_name
                                         bit_instances[bit].pin_mapping[base] = inst.pin_mapping[(instance_name, pin_name)] # Use the original pin mapping
                                 else:
                                     # duplicate non-bit pins for all bits

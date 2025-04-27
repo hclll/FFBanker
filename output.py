@@ -3,6 +3,7 @@ from parser import Parser
 from preprocessing import annotate_ff_features, find_single_bit_ff, debanking_all
 import statistics
 import re
+import subprocess
 
 def generate_output_file(parsed_data, file_name="output.txt"): 
 
@@ -58,7 +59,48 @@ def generate_output_file(parsed_data, file_name="output.txt"):
                         for original_name in instances[key].original_name:
                             file.write(str(original_name) + "/" + str("CLK") + " " + "map" + " " + str("new_" + instances[key].name) +                     "/" + str("CLK") + "\n");
 
-                
+
+def check_output(input_file,output_file): # Checker must be in same directory as other stuff, inputs should be strings of file names.
+    
+    result = subprocess.run(["./main",input_file,output_file],capture_output = True);
+    success = str(result.stdout); # returns text if checker was successful
+    # print("success: ", success)
+    
+    success = success.replace("\\n","\n")
+    split_success = success.splitlines()
+    # print("split_success: ", split_success)
+
+    check_pass = False
+    init_score = -1
+    final_score = -1
+    for line in split_success:
+        if "Init score:" in line:
+            init_score = re.split(r"[:\s]+", line)[-1]
+            init_score = float(init_score)
+            print("Init score: ", init_score)
+        if "Check pass" in line:
+            check_pass = True
+            print("Check: ", line)
+        if "Final score:" in line:
+            final_score = re.split(r"[:\s]+", line)[-1]
+            final_score = float(final_score)
+            print("Final score: ", final_score)
+
+    print("check_pass: ", check_pass)
+
+    return check_pass, init_score, final_score
+
+
+def generate_default_output_file(parsed_data, file_name="output.txt"): 
+    # Generate a default output file with no changes
+    with open(file_name, "w") as file:
+        file.write("CellInst " + str(len(parsed_data.die.instances)) + "\n")
+        for inst_name, inst in parsed_data.die.instances.items():
+            file.write(f"Inst new_{inst_name} {inst.cell_type} {inst.x} {inst.y}\n")
+        for inst_name, inst in parsed_data.die.instances.items():
+            for pin in parsed_data.cell_library.flip_flops[inst.cell_type].pins:
+                file.write(f"{inst_name}/{pin} map new_{inst_name}/{pin}\n")         
+
 
 if __name__ == "__main__":
 
@@ -73,7 +115,20 @@ if __name__ == "__main__":
     
     # Generate output file mapping current design to the old design
     generate_output_file(parsed_data)
+    generate_default_output_file(parsed_data, file_name="output.txt")
        
+    # parser = Parser("bm/sampleCase")
+    # generate_default_output_file(parsed_data, file_name="output.txt")
+    
+    input_file = "bm/sampleCase"
+    output_file = "output.txt"
+    check_pass, init_score, final_score = check_output(input_file,output_file)
+    
+    if not check_pass or final_score > init_score:
+        print("Generate default output file")
+        parser = Parser("bm/sampleCase")
+        generate_default_output_file(parsed_data, file_name="output.txt")
+    
     
 
 

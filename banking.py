@@ -717,7 +717,7 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
             #print(f"    Attempting to resolve overlap at {site} for {overlapping_instances}")
 
             def return_instance_area(instance):
-                instance = parsed_data.die.instances.get(instance)
+                instance = parser_obj.die.instances.get(instance)
                 cell = cell_library.flip_flops.get(instance.cell_type)
                 if cell:
                     return cell.width * cell.height

@@ -600,31 +600,52 @@ def find_adjacent_empty_site(instance_name, instance_width, instance_height, cur
 
     start_x, start_y = current_site # Bottom-left site of the overlap
 
-    # Search Right then Left from the original overlap site's x-coordinate
-    for direction in [1, -1]: # 1 for right, -1 for left
-        for i in range(0, max_search_dist + 1): # Check distance 0 first (original column if possible), then 1 site right/left, etc.
-            potential_start_site_x = start_x + direction * i * start_row.site_width
-            potential_start_site_coords = (potential_start_site_x, start_y) # Potential bottom-left
+    # Search outwards layer by layer
+    # Check distance 0 (current site, should be occupied), then 1, 2, ... max_search_dist
+    search_directions = [(1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1)] # Right, Left, Up, Down
 
-            # Check if the potential bottom-left site is horizontally within the start row bounds
-            if not (start_row.start_x <= potential_start_site_x < start_row.start_x + start_row.total_sites * start_row.site_width):
-                break# This starting X is invalid in the base row, try next distance
+    for i in range(0, max_search_dist + 1): # Search distance/layer
+        for delta_x, delta_y in search_directions: # Check all directions at this distance
+            # Calculate potential bottom-left site coordinates for this distance and direction
+            potential_start_site_x = start_x + delta_x * i * start_row.site_width
+            potential_start_site_y = start_y + delta_y * i * start_row.site_height
+            potential_start_site_coords = (potential_start_site_x, potential_start_site_y)
 
-            # Check if the instance fits horizontally from this potential start X
-            if potential_start_site_x + instance_width > start_row.start_x + start_row.total_sites * start_row.site_width + 1e-9: # Tolerance
-                break # Doesn't fit horizontally, try next distance
+            # Skip the original site (distance 0) as it's the source of the overlap
+            if i == 0 and potential_start_site_coords == current_site:
+                 continue
 
-            # Now, check if all sites (horizontally and vertically) are clear
+            # Find the row corresponding to the potential start site's y-coordinate
+            potential_start_row = placement_rows_map.get(potential_start_site_y)
+            if not potential_start_row:
+                # If moving vertically, the target row must exist
+                if delta_y != 0:
+                    continue # This row doesn't exist, try next distance/direction
+                # If moving horizontally (delta_y == 0), potential_start_site_y is start_y,
+                # and start_row should already be valid. If not, something is wrong.
+                elif not start_row:
+                     print(f"    Error (find_adjacent): Start row is invalid for {instance_name}.")
+                     return None # Should not happen if initial checks pass
+
+            # Check if the potential bottom-left site is horizontally within the potential start row bounds
+            if not (potential_start_row.start_x <= potential_start_site_x < potential_start_row.start_x + potential_start_row.total_sites * potential_start_row.site_width):
+                continue # This starting X is invalid in the base row, try next distance/direction
+
+            # Check if the instance fits horizontally from this potential start X in the potential start row
+            if potential_start_site_x + instance_width > potential_start_row.start_x + potential_start_row.total_sites * potential_start_row.site_width + 1e-9: # Tolerance
+                continue # Doesn't fit horizontally, try next distance/direction
+
+            # Now, check if all sites (horizontally and vertically) are clear from the potential start site
             all_sites_clear = True
             for row_offset in range(num_rows_needed):
-                check_row_y = start_y + row_offset * start_row.site_height
+                check_row_y = potential_start_site_y + row_offset * potential_start_row.site_height
                 check_row = placement_rows_map.get(check_row_y)
 
                 if not check_row:
-                    all_sites_clear = False # Required row doesn't exist
+                    all_sites_clear = False # Required row doesn't exist for the instance's height
                     break
                 # Optional: Add compatibility check if needed, though create_site_instance_mappings should prevent incompatible multi-row instances
-                # if not (check_row.start_x == start_row.start_x and ...): all_sites_clear = False; break
+                # if not (check_row.start_x == potential_start_row.start_x and ...): all_sites_clear = False; break
 
                 for site_offset_x in range(num_sites_needed_horiz):
                     check_site_x = potential_start_site_x + site_offset_x * check_row.site_width
@@ -644,14 +665,11 @@ def find_adjacent_empty_site(instance_name, instance_width, instance_height, cur
                             break # Site is occupied by another instance or multiple instances
 
                 if not all_sites_clear:
-                    break # Stop checking rows if a conflict was found
+                    break # Stop checking sites if a conflict was found
 
             if all_sites_clear:
                 #print(f"    Found empty spot for {instance_name} (size {num_sites_needed_horiz}x{num_rows_needed}) at {potential_start_site_coords}")
                 return potential_start_site_coords # Found a suitable empty spot
-            
-
-        # If searching right failed, the loop continues to search left (direction = -1)
 
     #print(f"    Could not find adjacent empty spot for {instance_name} near {current_site}")
     return None
@@ -668,8 +686,8 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
     Returns:
         True if all overlaps were resolved, False otherwise.
     """
+    assert "C70958" in parser_obj.die.instances
     print("\n--- Resolving Overlapping Instances ---")
-    assert "C102260" in parser_obj.die.instances
     cell_library = parser_obj.cell_library
     placement_rows_map = {row.start_y: row for row in parser_obj.placement_rows}
 
@@ -699,14 +717,23 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
             overlapping_instances = site_to_instances[site]
             #print(f"    Attempting to resolve overlap at {site} for {overlapping_instances}")
 
-            for instance_to_move_name in overlapping_instances:
+            def return_instance_area(instance):
+                instance = parsed_data.die.instances.get(instance)
+                cell = cell_library.flip_flops.get(instance.cell_type)
+                if cell:
+                    return cell.width * cell.height
+                else:
+                    return 0
+                
+            for instance_to_move_name in sorted(overlapping_instances, key=return_instance_area, reverse=False):
             # Try moving the second instance in the list (simple strategy)
             #instance_to_move_name = overlapping_instances[1]
                 instance_to_move = parser_obj.die.instances.get(instance_to_move_name)
+                if not instance_to_move:
+                    print(f"    Error: Instance '{instance_to_move_name}' not found in instances_dict. Skipping.")
+                    continue
+
                 if instance_to_move.cell_type in cell_library.flip_flops:
-                    if not instance_to_move:
-                        print(f"    Error: Instance '{instance_to_move_name}' not found in instances_dict. Skipping.")
-                        continue
 
                     # Get instance dimensions
                     instance_width = 0
@@ -715,13 +742,6 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
                         cell = cell_library.flip_flops[instance_to_move.cell_type]
                         instance_width = cell.width
                         instance_height = cell.height
-                    elif instance_to_move.cell_type in cell_library.gates:
-                        # Assuming gates are not moved or handled differently
-                        assert False, "Overlap resolution currently only handles moving Flip-Flops"
-                        continue # Skip moving gates for now
-                    else:
-                        print(f"    Warning: Cell type '{instance_to_move.cell_type}' for instance '{instance_to_move_name}' not found. Cannot determine dimensions. Skipping move.")
-                        continue
 
                     if instance_width <= 0 or instance_height <= 0:
                          print(f"    Warning: Instance '{instance_to_move_name}' has invalid dimensions ({instance_width}x{instance_height}). Skipping move.")
@@ -777,6 +797,8 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
                         num_sites_horiz = ceil(instance_width / start_row.site_width) # Use start_row props
                         num_rows_needed = ceil(instance_height / start_row.site_height)
                         new_sites_list = [] # Keep track for updating instance_to_sites later
+                        
+                        assert len(old_sites_for_instance) == num_rows_needed * num_sites_horiz, f"Used to take up {len(old_sites_for_instance)} sites, now taking up {num_rows_needed * num_sites_horiz} sites"
 
                         for row_offset in range(num_rows_needed):
                             current_row_y = new_y + row_offset * start_row.site_height
@@ -807,7 +829,7 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
                         moved_count += 1
                         break
                     else:
-                        print(f"      Failed to find a new location for '{instance_to_move_name}' near site {site}.")
+                        #print(f"      Failed to find a new location for '{instance_to_move_name}' near site {site}.")
                         failed_moves += 1
                         # If we fail to move, the overlap persists for the next iteration (or final failure)
 
@@ -819,7 +841,7 @@ def resolve_overlaps(parser_obj, max_iterations= 10):
         # site_to_instances, instance_to_sites = create_site_instance_mappings(parser_obj) # This is already done at the start of the loop
         if moved_count == 0 and overlaps_found_this_iter:
             print(f"  Could not resolve remaining overlaps after iteration {iteration + 1}.")
-            break # No progress made, exit loop
+            #break # No progress made, exit loop
 
 
     # Final check after loop
@@ -946,7 +968,7 @@ if __name__ == "__main__":
 
         # --- Cluster and Merge Flip-Flops (Per Clock Net) ---
         # Call the new function that handles banking per clock net
-        #updated_instances, old_to_new_map = banking_each_clock_net(parsed_data)
+        updated_instances, old_to_new_map = banking_each_clock_net(parsed_data)
 
         # TODO: Verify create_pin_mapping logic with per-clock-net results.
 
@@ -957,15 +979,15 @@ if __name__ == "__main__":
         #    updated_instances, old_to_new_map = pickle.load(f)
 
         #print("\n".join(map(str, old_to_new_map.items())))
-        #create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
+        create_pin_mapping(parsed_data.die.instances, updated_instances, old_to_new_map, parsed_data.cell_library)
 
         # Update the main parser object's instances with the final result
-        #parsed_data.die.instances = updated_instances
+        parsed_data.die.instances = updated_instances
 
-        #with open("temp1.pkl", 'wb') as f:
-        #    pickle.dump(parsed_data, f)
-        with open("temp1.pkl", 'rb') as f:
-            parsed_data = pickle.load(f)
+        with open("temp1.pkl", 'wb') as f:
+            pickle.dump(parsed_data, f)
+        #with open("temp1.pkl", 'rb') as f:
+        #    parsed_data = pickle.load(f)
 
 
         # --- Old FF to New FF Mapping (Sample) --- # (This section seems fine)

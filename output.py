@@ -93,11 +93,18 @@ def check_output(input_file,output_file): # Checker must be in same directory as
 
 def generate_default_output_file(parsed_data, file_name="output.txt"): 
     # Generate a default output file with no changes
+    all_instances = parsed_data.die.instances;
+    FF_instances = {};
+    #Check that instances are FFs.
+    for instance in all_instances:                                                                                           
+        if all_instances[instance].cell_type in parsed_data.cell_library.flip_flops:
+            FF_instances[instance] = all_instances[instance];
+    print(FF_instances.items());
     with open(file_name, "w") as file:
-        file.write("CellInst " + str(len(parsed_data.die.instances)) + "\n")
-        for inst_name, inst in parsed_data.die.instances.items():
+        file.write("CellInst " + str(len(FF_instances)) + "\n")
+        for inst_name, inst in FF_instances.items():
             file.write(f"Inst new_{inst_name} {inst.cell_type} {inst.x} {inst.y}\n")
-        for inst_name, inst in parsed_data.die.instances.items():
+        for inst_name, inst in FF_instances.items():
             for pin in parsed_data.cell_library.flip_flops[inst.cell_type].pins:
                 file.write(f"{inst_name}/{pin} map new_{inst_name}/{pin}\n")         
 

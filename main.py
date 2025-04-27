@@ -8,8 +8,8 @@ from debanking import run_checker, debanking_some
 
 def main():
     # Preprocessing
-    parser = Parser("bm/sampleCase")
-    # parser = Parser("bm/testcase1_0812.txt")  
+    #parser = Parser("sampleCase2")
+    parser = Parser("bm/testcase1_0812.txt")  
     parsed_data = parser.parse()
     die = parsed_data.die
     cell_lib = parsed_data.cell_library
@@ -19,10 +19,7 @@ def main():
 
     force_directed_placement(die, netlist, rows, cell_lib, iterations=20, damping=0.8)
     resolve_overlaps(parsed_data)
-    generate_output_file(parsed_data, "Outputs/sample_placed.txt")
     # generate_output_file(parsed_data, "Outputs/testcase1_0812_placed.txt")
-
-    # return
     
     # Banking
     final_instances, old_to_new_map = banking_each_clock_net(parsed_data)
@@ -31,12 +28,13 @@ def main():
     resolve_overlaps(parsed_data)
 
     # Generate output file of current design 
-    generate_output_file(parsed_data, "Outputs/sample_banked.txt")
+    # generate_output_file(parsed_data, "Outputs/sample_banked.txt")
+    generate_output_file(parsed_data, "output_after_banking.txt")
 
     # Run checker using test input and generated output file.
-    input_file = str("bm/sampleCase")
-    # input_file = str("bm/testcase1_0812.txt")
-    output_file = str("output.txt")
+    #input_file = str("sampleCase2")
+    input_file = str("bm/testcase1_0812.txt")
+    output_file = str("output_after_banking.txt")
     decreased_slack = run_checker(input_file,output_file)
     #print("Decreased slack dictionary:",decreased_slack)
 
@@ -49,7 +47,7 @@ def main():
     # FINAL Placement fixing HERE
 
     # Run generate_output_file here for final design.
-    generate_output_file(parsed_data, "Outputs/sample.txt")
+    generate_output_file(parsed_data, "output_after_debanking.txt")
 
 if __name__ == "__main__":
     main()

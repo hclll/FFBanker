@@ -51,7 +51,7 @@ def main():
     # FINAL Placement fixing HERE
 
     # Run generate_output_file here for final design.
-    # generate_output_file(parsed_data, "output_after_debanking.txt")
+    generate_output_file(parsed_data, "output_after_debanking.txt")
 
     input_file = input_file
     output_file = output_file
@@ -60,6 +60,7 @@ def main():
     if not check_pass or final_score > init_score:
         print("Generate default output file")
         parser = Parser(input_file)
+        parsed_data = parser.parse()
         generate_default_output_file(parsed_data, file_name=output_file)
     
     

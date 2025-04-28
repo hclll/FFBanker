@@ -5,7 +5,7 @@ import statistics
 import re
 import subprocess
 
-def generate_output_file(parsed_data, file_name="output.txt"): 
+def generate_output_file(parsed_data, file_name): 
 
     # Access cell library
     cell_lib = parsed_data.cell_library;
@@ -99,7 +99,7 @@ def generate_default_output_file(parsed_data, file_name="output.txt"):
     for instance in all_instances:                                                                                           
         if all_instances[instance].cell_type in parsed_data.cell_library.flip_flops:
             FF_instances[instance] = all_instances[instance];
-    print(FF_instances.items());
+    #print(FF_instances.items());
     with open(file_name, "w") as file:
         file.write("CellInst " + str(len(FF_instances)) + "\n")
         for inst_name, inst in FF_instances.items():

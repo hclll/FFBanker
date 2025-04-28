@@ -8,9 +8,9 @@ from debanking import run_checker, debanking_some
 
 def main():
     # Preprocessing
+    #input_file = str("sampleCase2");
     input_file = str("bm/testcase1_0812.txt")
     output_file = str("output.txt")
-    #parser = Parser("sampleCase2")
     parser = Parser(input_file)  
     parsed_data = parser.parse()
     die = parsed_data.die
@@ -23,39 +23,33 @@ def main():
     print("Placement Completed")
     resolve_overlaps(parsed_data)
     generate_output_file(parsed_data, "Outputs/testcase1_0812_placed.txt")
-    # return
     
     # Banking
     final_instances, old_to_new_map = banking_each_clock_net(parsed_data)
     create_pin_mapping(die.instances,final_instances,old_to_new_map,cell_lib)
     die.instances = final_instances
     resolve_overlaps(parsed_data)
-
-    # Generate output file of current design 
-    # generate_output_file(parsed_data, "Outputs/sample_banked.txt")
-    # generate_output_file(parsed_data, "output_after_banking.txt")
+    generate_output_file(parsed_data, "output_after_banking.txt")
 
     # Run checker using test input and generated output file.
-    #input_file = str("sampleCase2")
     input_file = str(input_file)
     output_file = str(output_file)
-    decreased_slack = run_checker(input_file,output_file)
-    #print("Decreased slack dictionary:",decreased_slack)
+    decreased_slack = run_checker(input_file,"output_after_banking.txt");
 
     # Debank more using checker slack results.
     die = parsed_data.die
     cell_lib = parsed_data.cell_library
     netlist = parsed_data.netlist
-    debanking_some(die,cell_lib,netlist,decreased_slack)
+    debanking_some(die,cell_lib,netlist,decreased_slack,parsed_data)
 
-    # FINAL Placement fixing HERE
+    resolve_overlaps(parsed_data) # put newly debanked FFs into legal sites
 
     # Run generate_output_file here for final design.
     generate_output_file(parsed_data, "output_after_debanking.txt")
 
     input_file = input_file
     output_file = output_file
-    check_pass, init_score, final_score = check_output(input_file,output_file)
+    check_pass, init_score, final_score = check_output(input_file,"output_after_debanking.txt")
     
     if not check_pass or final_score > init_score:
         print("Generate default output file")

@@ -77,7 +77,7 @@ def force_directed_placement(die, netlist, rows, cell_lib, iterations=100, dampi
         die.placed_sites.add((final_x, final_y))
         positions[name] = np.array([final_x, final_y])
 
-    print("Final positions:", positions)
+    #print("Final positions:", positions)
     for name in movable:
         die.instances[name].x, die.instances[name].y = positions[name]
 
